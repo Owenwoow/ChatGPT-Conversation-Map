@@ -31,7 +31,7 @@ jobs:
         run: |
           $manifest = Get-Content -Raw manifest.json | ConvertFrom-Json
           $package = Get-Content -Raw package.json | ConvertFrom-Json
-          $lock = Get-Content -Raw package-lock.json | ConvertFrom-Json
+          $lock = Get-Content -Raw package-lock.json | ConvertFrom-Json -AsHashTable
           if ($manifest.version -ne $package.version -or $manifest.version -ne $lock.version) {
             throw 'manifest.json、package.json 和 package-lock.json 的版本不一致。'
           }
