@@ -12,6 +12,7 @@
     body: '[data-markdown-text-style="assistant-message"], .markdown, [data-message-content]',
     userBody: '[data-user-message-bubble]',
     contentColumn: '[data-thread-user-message-navigation-content]',
+    sidePanel: '[data-summary-panel-variant], aside, [role="complementary"], [role="dialog"], [data-testid*="side-panel"], [data-testid*="sidebar"]',
     outlineExcluded: 'pre,code,[hidden],[inert],[aria-hidden="true"],[data-d-component="box"][data-d-has-border]',
     stop: '[data-testid="stop-button"], button[aria-label="Stop generating"], button[aria-label="停止生成"], button[aria-label="停止流式传输"]',
     streaming: '[data-is-streaming="true"], .result-streaming'
@@ -29,19 +30,36 @@
     return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.visibility !== 'collapse';
   }
 
-  function findMain(key) {
+  function getKey() { return location.pathname.replace(/\/$/, '') || '/'; }
+  function conversationId(key) {
+    const id = key.match(/\/c\/([^/]+)/)?.[1];
+    try { return id ? decodeURIComponent(id) : null; } catch { return id; }
+  }
+  function isDraftKey(key) {
+    const id = conversationId(key);
+    return !id || id.startsWith('local-chatgpt:');
+  }
+
+  function findMain(key, { draftId, allowDraft } = {}) {
     // The app keeps previous conversations mounted in hidden sibling mains.
     const candidates = Array.from(document.querySelectorAll(SELECTORS.main)).filter(isVisible);
-    const conversationId = key.match(/\/c\/([^/]+)/)?.[1];
-    if (conversationId) {
+    const id = conversationId(key);
+    if (id) {
       let identified = false;
+      let draft = null;
       for (const main of candidates) {
         const markers = Array.from(main.querySelectorAll(SELECTORS.conversation));
         identified ||= markers.length > 0;
-        if (markers.some(marker => marker.getAttribute('data-chatgpt-conversation-selection-target') === conversationId)) {
-          return { main, routeConfirmed: true };
+        const ids = markers.map(marker => marker.getAttribute('data-chatgpt-conversation-selection-target'));
+        if (ids.includes(id)) {
+          return { main, routeConfirmed: true, draftId: id.startsWith('local-chatgpt:') ? id : null };
         }
+        const localId = ids.find(value => value?.startsWith('local-chatgpt:') && (allowDraft || value === draftId));
+        if (localId) draft = { main, routeConfirmed: false, draftId: localId };
       }
+      // The live new-chat container keeps its local ID after the URL is saved.
+      // Only continue the observed draft; never accept arbitrary route mismatches.
+      if (draft) return draft;
       // Content may change before the router updates its URL. Wait for them to
       // agree instead of caching the next conversation under the previous URL.
       if (identified) return { main: null, routeConfirmed: false };
@@ -68,12 +86,15 @@
       })).filter(heading => heading.text);
   }
 
-  function scan() {
-    const key = location.pathname.replace(/\/$/, '') || '/';
-    const { main, routeConfirmed } = findMain(key);
+  function scan(options) {
+    const key = getKey();
+    const { main, routeConfirmed, draftId } = findMain(key, options);
     if (!main) return { key, main: null, routeConfirmed, scrollRoot: document.scrollingElement, messages: [], streaming: false };
     const messages = [];
     for (const element of main.querySelectorAll(SELECTORS.message)) {
+      // Native link previews contain their own assistant/search-unit markup.
+      // They are not turns in the conversation being navigated.
+      if (element.closest(SELECTORS.sidePanel)) continue;
       const unitKey = element.getAttribute('data-chatgpt-search-unit-key');
       const unitMatch = unitKey?.match(/^(.*):(\d+):(user|assistant)$/);
       const role = element.getAttribute('data-message-author-role') || unitMatch?.[3];
@@ -97,13 +118,13 @@
     }
     const streaming = Array.from(document.querySelectorAll(SELECTORS.stop)).some(button => {
       const owner = button.closest(SELECTORS.main);
-      return (!owner || owner === main || main.contains(owner)) && isVisible(button);
+      return !button.closest(SELECTORS.sidePanel) && (!owner || owner === main || main.contains(owner)) && isVisible(button);
     }) || messages.some(message => message.streaming);
     if (streaming) {
       const latest = messages.findLast(message => message.role === 'assistant');
       if (latest) latest.streaming = true;
     }
-    return { key, main, routeConfirmed, scrollRoot: getScrollRoot(messages[0]?.element || main), messages, streaming };
+    return { key, main, routeConfirmed, draftId, scrollRoot: getScrollRoot(messages[0]?.element || main), messages, streaming };
   }
 
   function getContentRect(main) {
@@ -125,13 +146,30 @@
     return { left, right: left + width, top: outer.top, bottom: outer.bottom, width, height: outer.height };
   }
 
+  function getRightPanel(main, panels = document.querySelectorAll(SELECTORS.sidePanel)) {
+    const outer = main.getBoundingClientRect();
+    let chosen = null;
+    for (const panel of panels) {
+      if (!isVisible(panel) || panel.closest(SELECTORS.message)) continue;
+      const rect = panel.getBoundingClientRect();
+      // Floating previews have a small viewport inset. Include full-width
+      // summary panels on narrow screens, but not the native left sidebar.
+      if (rect.width >= 200 && rect.height >= 200 && rect.right >= innerWidth - 64 &&
+          rect.left < innerWidth && rect.bottom > 100 && rect.top < innerHeight - 100 &&
+          (rect.left > outer.left + 180 || panel.matches('[data-summary-panel-variant]'))) {
+        if (!chosen || rect.left < chosen.getBoundingClientRect().left) chosen = panel;
+      }
+    }
+    return chosen;
+  }
+
   function isComposer(element) {
     return !!element?.closest?.('#prompt-textarea, textarea, [contenteditable="true"]');
   }
   function isSendButton(element) {
-    return !!element?.closest?.('[data-testid="send-button"], button[aria-label="Send prompt"], button[aria-label="发送提示"]');
+    return !!element?.closest?.('[data-testid="send-button"], [data-testid="composer-submit-button"], button[aria-label="Send prompt"], button[aria-label="发送提示"], button[aria-label="发送"]');
   }
-  ns.adapter = { scan, getScrollRoot, getContentRect, isComposer, isSendButton, selectors: SELECTORS };
+  ns.adapter = { scan, getKey, isDraftKey, getScrollRoot, getContentRect, getRightPanel, isComposer, isSendButton, selectors: SELECTORS };
   // Direct aliases keep consumers independent of the adapter's internal organization.
   ns.scan = scan;
   ns.getScrollRoot = getScrollRoot;

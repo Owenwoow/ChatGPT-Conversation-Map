@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   if (document.getElementById('dual-navigator-host')) return;
-  const build = '2026-10-30.8';
+  const build = '2026-10-31.3';
   console.info(`[Dual Navigator] starting build ${build}`);
   const {adapter, ConversationStore, buildTree} = globalThis.DualNav;
   const store = new ConversationStore();
@@ -12,8 +12,11 @@
   let navigation = 0, targetLock = null, scrollRoot = null, closeTimer = 0;
   let lastRailActive = null, seenRouteMessages = new Map(), routeExclusions = new WeakMap();
   let draftSendAt = 0, explicitNavigation = false;
+  let pendingDraftId = null;
   let observedMain = null;
-  const layoutObserver = new ResizeObserver(()=>schedulePosition());
+  let nativePanel = null, panelTemporaryOpen = false;
+  let sidePanels = [], panelCandidatesDirty = true, layoutFrame = 0;
+  const layoutObserver = new ResizeObserver(()=>scheduleLayout());
   const motionPreference = matchMedia('(prefers-reduced-motion: reduce)');
   const textMetrics = document.createElement('canvas').getContext('2d');
   const branchAnimations = new Map();
@@ -207,7 +210,10 @@
     const area=adapter.getContentRect(snapshot.main);
     if(!area || !Number.isFinite(area.left))return;
     const mainRect=snapshot.main.getBoundingClientRect();
-    const leftEdge=Math.max(0,mainRect.left), rightEdge=Math.min(innerWidth,mainRect.right);
+    if(panelCandidatesDirty){sidePanels=Array.from(document.querySelectorAll(adapter.selectors.sidePanel));panelCandidatesDirty=false;}
+    const nextPanel=adapter.getRightPanel(snapshot.main,sidePanels);
+    if(nextPanel!==nativePanel){nativePanel=nextPanel;panelTemporaryOpen=false;}
+    const leftEdge=Math.max(0,mainRect.left), rightEdge=Math.min(innerWidth,mainRect.right,nativePanel?.getBoundingClientRect().left??Infinity);
     const leftSpace=area.left-leftEdge;
     const rightSpace=rightEdge-area.right;
     const root=scrollRoot||document.scrollingElement;
@@ -234,7 +240,9 @@
     toc.classList.toggle('overlay',compact);
     const hasHeadings=settings.rightEnabled && headings(active).length>0;
     const canFit=rightEdge-leftEdge>=180;
-    const closed=manualClosed || (compact&&!temporaryOpen);
+    // Temporarily yield to native previews without changing the user's normal
+    // open/closed preference. An explicit click can open us to their left.
+    const closed=manualClosed || (compact&&!temporaryOpen) || (nativePanel&&compact&&!panelTemporaryOpen);
     setTocVisible(hasHeadings&&canFit&&!closed);
     opener.hidden=!hasHeadings||!canFit||!closed;
     toc.style.left=`${rightEdge-panelWidth-rightInset}px`;toc.style.top='100px';
@@ -259,6 +267,7 @@
     render();
   }
   function schedulePosition(){if(!frame)frame=requestAnimationFrame(()=>{frame=0;updateActive();});}
+  function scheduleLayout(){if(!layoutFrame)layoutFrame=requestAnimationFrame(()=>{layoutFrame=0;position();});}
   function theme() {
     const dark=document.documentElement.classList.contains('dark') || document.documentElement.dataset.theme==='dark' || getComputedStyle(document.documentElement).colorScheme==='dark';
     host.style.setProperty('--dn-bg',dark?'#212121':'#fff');
@@ -269,7 +278,8 @@
   }
   function refresh() {
     clearTimeout(timer);timer=0;
-    snapshot=adapter.scan();
+    if(explicitNavigation || (currentKey&&!adapter.isDraftKey(currentKey)&&adapter.getKey()!==currentKey))pendingDraftId=null;
+    snapshot=adapter.scan({draftId:pendingDraftId,allowDraft:!!currentKey&&adapter.isDraftKey(currentKey)&&!explicitNavigation});
     if(snapshot.main!==observedMain) {
       layoutObserver.disconnect();observedMain=snapshot.main;
       if(observedMain) {
@@ -281,7 +291,8 @@
     const pathChanged=snapshot.key!==currentKey;
     // Sending the first message promotes the same mounted draft into /c/<id>.
     // Preserve it; it is not a switch to a different conversation.
-    if(currentKey && !currentKey.includes('/c/') && snapshot.key.includes('/c/') && !explicitNavigation && Date.now()-draftSendAt<15000 && snapshot.messages.some(m=>seenRouteMessages.has(m.element))) {
+    if(currentKey && adapter.isDraftKey(currentKey) && snapshot.key.includes('/c/') && !explicitNavigation &&
+        (snapshot.draftId || Date.now()-draftSendAt<15000 || snapshot.messages.some(m=>seenRouteMessages.has(m.element)))) {
       currentKey=snapshot.key;store.key=currentKey;
     }
     if(snapshot.key!==currentKey) {
@@ -290,11 +301,15 @@
       routeExclusions=new WeakMap(seenRouteMessages);seenRouteMessages=new Map();
       currentKey=snapshot.key;store.reset(currentKey);active=null;folded.clear();
       manualClosed=false;userClosed=false;temporaryOpen=false;wasStreaming=false;treeSignature=railSignature=null;cancelNavigation();
+      nativePanel=null;panelTemporaryOpen=false;
+      pendingDraftId=null;
       setTocVisible(false,true);
       clearTimeout(closeTimer);hovering=false;
       preview.hidden=true;
     }
     if(pathChanged){explicitNavigation=false;draftSendAt=0;}
+    if(snapshot.draftId)pendingDraftId=snapshot.draftId;
+    else if(snapshot.routeConfirmed)pendingDraftId=null;
     if(snapshot.routeConfirmed)routeExclusions=new WeakMap();
     snapshot={...snapshot,messages:snapshot.messages.filter(m=>routeExclusions.get(m.element)!==`${m.id}\n${m.text}`)};
     for(const message of snapshot.messages)seenRouteMessages.set(message.element,`${message.id}\n${message.text}`);
@@ -313,9 +328,9 @@
       if(settings.autoCollapse&&!hovering&&!temporaryOpen&&!toc.matches(':focus-within')){manualClosed=true;position();}
     },650);
   }
-  $('.collapse').addEventListener('click',()=>{manualClosed=true;userClosed=true;temporaryOpen=false;position();opener.focus({preventScroll:true});});
+  $('.collapse').addEventListener('click',()=>{manualClosed=true;userClosed=true;temporaryOpen=false;panelTemporaryOpen=false;position();opener.focus({preventScroll:true});});
   opener.addEventListener('click',()=>{
-    manualClosed=false;userClosed=false;temporaryOpen=true;clearTimeout(closeTimer);position();$('.collapse').focus({preventScroll:true});
+    manualClosed=false;userClosed=false;temporaryOpen=true;panelTemporaryOpen=true;clearTimeout(closeTimer);position();$('.collapse').focus({preventScroll:true});
   });
   toc.addEventListener('mouseenter',()=>{hovering=true;clearTimeout(closeTimer);});
   toc.addEventListener('mouseleave',()=>{hovering=false;scheduleAutoClose();});
@@ -334,7 +349,13 @@
   window.addEventListener('keydown',e=>{
     if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&adapter.isComposer(e.target)){draftSendAt=Date.now();explicitNavigation=false;}
     if(['PageDown','PageUp','ArrowDown','ArrowUp','Home','End'].includes(e.key))cancelNavigation();
-    if(e.key==='Escape'){const inside=toc.matches(':focus-within');preview.hidden=true;manualClosed=true;userClosed=true;temporaryOpen=false;position();if(inside&&!opener.hidden)opener.focus({preventScroll:true});}
+    if(e.key==='Escape'){
+      const inside=toc.matches(':focus-within')||shadow.activeElement===opener;
+      preview.hidden=true;
+      // Let Escape close a focused native preview without recording a manual
+      // TOC collapse; its previous visibility should return with the page.
+      if(!nativePanel||inside){manualClosed=true;userClosed=true;temporaryOpen=false;panelTemporaryOpen=false;position();if(inside&&!opener.hidden)opener.focus({preventScroll:true});}
+    }
   },true);
   document.addEventListener('click',e=>{
     if(adapter.isSendButton(e.target)){draftSendAt=Date.now();explicitNavigation=false;}
@@ -344,21 +365,45 @@
   new MutationObserver(records=>{
     // A page hydration/recovery can remove nodes outside body or replace body.
     // Keep the original host and listeners, then scan the current page again.
-    if(!host.isConnected) {
+    let needsScan=!host.isConnected, needsLayout=false;
+    if(needsScan) {
       document.documentElement.append(host);
       console.info(`[Dual Navigator] restored host (build ${build})`);
     }
-    if(records.some(record=>{
-      if(record.target===host||host.contains(record.target))return false;
-      if(record.type!=='attributes')return true;
-      const target=record.target;
-      return target.matches(`${adapter.selectors.main}, ${adapter.selectors.conversation}`)||!!target.querySelector(adapter.selectors.main);
-    }))scheduleScan();
-  }).observe(document.documentElement,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class','style','hidden','inert','aria-hidden','data-chatgpt-conversation-selection-target']});
-  new MutationObserver(()=>{theme();schedulePosition();}).observe(document.documentElement,{attributes:true,attributeFilter:['class','data-theme','style']});
+    const roots=`${adapter.selectors.main}, ${adapter.selectors.conversation}, ${adapter.selectors.message}, ${adapter.selectors.turn}, ${adapter.selectors.contentColumn}`;
+    for(const record of records) {
+      if(record.target===host||host.contains(record.target))continue;
+      const target=record.target.nodeType===Node.ELEMENT_NODE?record.target:record.target.parentElement;
+      if(!target)continue;
+      if(record.type==='attributes'&&['role','data-testid','data-summary-panel-variant'].includes(record.attributeName))panelCandidatesDirty=true;
+      // Preview streaming and animation affect only geometry, never chat data.
+      if(target.closest(adapter.selectors.sidePanel)){needsLayout=true;continue;}
+      if(record.type==='attributes') {
+        needsLayout=true;
+        if(['class','style'].includes(record.attributeName)) {
+          if(target.matches(adapter.selectors.main)||target.querySelector(adapter.selectors.main)||
+              (record.attributeName==='class'&&target.matches(adapter.selectors.message)))needsScan=true;
+        } else if(target.closest(adapter.selectors.main)||target.querySelector(adapter.selectors.main))needsScan=true;
+      } else if(record.type==='characterData') {
+        if(target.closest(adapter.selectors.main))needsScan=true;
+      } else {
+        const nodes=[...record.addedNodes,...record.removedNodes].filter(node=>node!==host);
+        if(!nodes.length)continue;
+        if(nodes.some(node=>node.nodeType===Node.ELEMENT_NODE&&
+            (node.matches(adapter.selectors.sidePanel)||node.querySelector(adapter.selectors.sidePanel))))panelCandidatesDirty=true;
+        needsLayout=true;
+        if(nodes.every(node=>node.nodeType===Node.ELEMENT_NODE&&node.matches(adapter.selectors.sidePanel)))continue;
+        if(target.closest(adapter.selectors.main)||nodes.some(node=>node.nodeType===Node.ELEMENT_NODE&&
+            (node.matches(roots)||node.querySelector(roots))))needsScan=true;
+      }
+    }
+    if(needsScan)scheduleScan();
+    if(needsLayout)scheduleLayout();
+  }).observe(document.documentElement,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class','style','hidden','inert','aria-hidden','role','data-summary-panel-variant','data-chatgpt-conversation-selection-target','data-message-author-role','data-message-id','data-chatgpt-search-unit-key','data-chatgpt-search-message-ids','data-markdown-text-style','data-is-streaming','data-testid','data-thread-user-message-navigation-content']});
+  new MutationObserver(()=>{theme();scheduleLayout();}).observe(document.documentElement,{attributes:true,attributeFilter:['class','data-theme','style']});
   // popstate does not cover pushState from the isolated content-script world.
   window.addEventListener('popstate',()=>{explicitNavigation=true;refresh();});
-  setInterval(()=>{if(adapter.scanKey ? adapter.scanKey()!==currentKey : location.pathname!==currentKey) scheduleScan();},800);
+  setInterval(()=>{if(adapter.getKey()!==currentKey) scheduleScan();},800);
   if(globalThis.chrome?.storage) {
     chrome.storage.local.get(defaults).then(value=>{settings={...defaults,...value};scheduleScan();}).catch(()=>{});
     chrome.storage.onChanged.addListener((changes,area)=>{if(area!=='local')return;for(const key of Object.keys(defaults))if(changes[key])settings[key]=changes[key].newValue??defaults[key];scheduleScan();});

@@ -43,5 +43,8 @@ const path=require('node:path');
   await root.locator('.heading').first().click();await expect(root.locator('.toc')).toBeVisible();
   await root.locator('.collapse').click();await expect(root.locator('.toc')).toBeHidden();
   console.log('PASS 原版左侧功能、精简目录与收起图标；窄屏可手动展开跳转关闭');
+  await popup.locator('#autoCollapse').uncheck();
+  await require('./draft-scenario.cjs')(page);
+  console.log('PASS 真实MV3隔离环境下临时会话转正式会话，首次目录动态更新且保持历史隔离');
  } finally {await context?.close();await fs.rm(profile,{recursive:true,force:true});}
 })().catch(e=>{console.error(e);process.exitCode=1;});

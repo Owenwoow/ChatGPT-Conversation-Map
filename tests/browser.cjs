@@ -66,6 +66,41 @@ const assert=require('node:assert/strict');
  const railLeft=await root.locator('.rail').evaluate(el=>el.getBoundingClientRect().left);
  assert.equal(railLeft,280,'左侧距聊天区域边缘40px，避开240px原生侧栏');
  await expect(root.locator('.collapse')).toHaveText('−');
+ await page.evaluate(()=>{const panel=document.createElement('div');panel.id='native-preview';panel.dataset.summaryPanelVariant='summary';panel.setAttribute('role','complementary');panel.style.cssText='position:fixed;right:20px;top:58px;width:420px;height:90vh';panel.innerHTML='<div data-chatgpt-search-unit-key="fallback-turn-0:0:assistant"><div data-markdown-text-style="assistant-message"><h2>预览中的标题不能进入聊天目录</h2></div></div>';document.querySelector('main').append(panel);});
+ await expect(toc).toBeHidden();await expect(tick).toHaveCount(9);
+ await expect(root.locator('.open')).toBeVisible();
+ await expect.poll(()=>root.locator('.open').evaluate(el=>el.getBoundingClientRect().right)).toBeLessThan(1160);
+ await root.locator('.open').click();await expect(toc).toBeVisible();
+ assert((await toc.boundingBox()).x+(await toc.boundingBox()).width<=1160,'目录浮层应避开带20px页边距的原生右侧预览');
+ await page.evaluate(()=>document.querySelector('#native-preview').hidden=true);
+ await expect(toc).toBeVisible();
+ await expect.poll(()=>toc.evaluate(el=>Math.round(el.getBoundingClientRect().right))).toBe(1560);
+ // Reopening must yield again, even after the user previously opened the TOC.
+ await page.evaluate(()=>document.querySelector('#native-preview').hidden=false);
+ await expect(toc).toBeHidden();
+ await page.evaluate(()=>{
+   const panel=document.querySelector('#native-preview');panel.tabIndex=-1;panel.focus();
+   panel.addEventListener('keydown',e=>{if(e.key==='Escape')panel.hidden=true;},{once:true});
+ });
+ await page.keyboard.press('Escape');
+ await expect(toc).toBeVisible();
+ // A preview must not override a deliberate manual collapse.
+ await root.locator('.collapse').click();
+ await page.evaluate(()=>document.querySelector('#native-preview').hidden=false);
+ await expect.poll(()=>root.locator('.open').evaluate(el=>el.getBoundingClientRect().right)).toBeLessThan(1160);
+ await page.evaluate(()=>document.querySelector('#native-preview').remove());
+ await expect.poll(()=>root.locator('.open').evaluate(el=>el.getBoundingClientRect().right)).toBe(1560);
+ await expect(toc).toBeHidden();await root.locator('.open').click();
+ await page.setViewportSize({width:2400,height:1000});
+ await page.evaluate(()=>{const panel=document.createElement('aside');panel.id='wide-preview';panel.style.cssText='position:fixed;right:20px;top:58px;width:240px;height:90vh';document.body.append(panel);});
+ await expect(toc).toBeVisible();
+ await expect.poll(()=>toc.evaluate(el=>el.getBoundingClientRect().right)).toBeLessThanOrEqual(2140);
+ await page.evaluate(()=>document.querySelector('#wide-preview').style.cssText='position:fixed;inset:0');
+ await page.evaluate(()=>document.querySelector('#wide-preview').setAttribute('data-summary-panel-variant','summary'));
+ await expect(toc).toBeHidden();await expect(root.locator('.open')).toBeHidden();
+ await page.evaluate(()=>document.querySelector('#wide-preview').remove());await page.setViewportSize({width:1600,height:1000});
+ await expect(toc).toBeVisible();
+ console.log('PASS 真实预览结构排除伪轮次、空间不足暂收起、手动避让展开、关闭恢复、保留手动关闭和宽屏共存');
  // Virtualized history is remounted by the page in response to normal scrolling.
  await page.evaluate(()=>{
    window.detached=[...document.querySelectorAll('[data-testid="conversation-turn-0"],[data-testid="conversation-turn-1"]')];
@@ -103,6 +138,35 @@ const assert=require('node:assert/strict');
  await page.evaluate(()=>history.pushState({},'','/c/created-from-draft'));await page.waitForTimeout(1100);
  await expect(tick).toHaveCount(1);await expect(root.locator('.heading')).toHaveText('首条回答');
  console.log('PASS 首次发送后地址升级为正式会话，保留同一组消息');
+ await page.evaluate(()=>{history.pushState({},'','/');document.querySelector('#thread').replaceChildren();});await expect(tick).toHaveCount(0);
+ await page.evaluate(()=>{const input=document.querySelector('#prompt-textarea')||document.createElement('textarea');input.id='prompt-textarea';document.body.append(input);input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));input.remove();history.pushState({},'','/c/new-late-attributes');});
+ await page.waitForTimeout(1100);
+ await page.evaluate(()=>{const thread=document.querySelector('#thread');thread.innerHTML='<article><div id="late-user"><p>新问题</p></div></article><article><div id="late-answer"><div class="markdown"><h2>新回答标题</h2></div></div></article>';});
+ await page.waitForTimeout(250);
+ await page.evaluate(()=>{document.querySelector('#late-user').setAttribute('data-message-author-role','user');document.querySelector('#late-answer').setAttribute('data-message-author-role','assistant');});
+ await expect(tick).toHaveCount(1);await expect(root.locator('.heading')).toHaveText('新回答标题');
+ console.log('PASS 新聊天先切换地址、消息识别属性随后添加，无需刷新');
+ await page.evaluate(()=>{history.pushState({},'','/');document.querySelector('#thread').replaceChildren();});await expect(tick).toHaveCount(0);
+ await page.evaluate(()=>addTurn(0,'<h2>生成中</h2>'));await expect(tick).toHaveCount(1);
+ await expect(toc).toBeVisible();
+ await page.evaluate(()=>{
+   const input=document.createElement('textarea');input.id='prompt-textarea';document.body.append(input);
+   input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));input.remove();
+   // Promotion can remount every node, so there is no shared DOM identity.
+   const thread=document.querySelector('#thread');thread.replaceChildren(...[...thread.children].map(el=>el.cloneNode(true)));
+   history.pushState({},'','/c/remounted-first-answer');
+   const stop=document.createElement('button');stop.dataset.testid='stop-button';thread.append(stop);
+ });
+ await expect.poll(()=>page.evaluate(()=>document.querySelector('#dual-navigator-host').shadowRoot.querySelectorAll('.heading').length)).toBe(1);
+ // Wait until the route poll has run, then stream via text and child mutations.
+ await page.waitForTimeout(1100);await expect(tick).toHaveCount(1);await expect(toc).toBeVisible();
+ await page.evaluate(()=>document.querySelector('#thread h2').firstChild.data='第一章：动态标题');
+ await expect(root.locator('.heading')).toHaveText('第一章：动态标题');
+ await page.evaluate(()=>document.querySelector('#thread .markdown').insertAdjacentHTML('beforeend','<h3>生成中的新章节</h3>'));
+ await expect(root.locator('.heading')).toHaveText(['第一章：动态标题','生成中的新章节']);
+ await page.evaluate(()=>document.querySelector('[data-testid="stop-button"]').remove());
+ await expect(toc).toBeVisible();await expect(tick).toHaveCount(1);
+ console.log('PASS 首次回答与地址升级同时重建DOM，标题文字和层级随生成更新，全程无需刷新');
  await page.evaluate(()=>{history.pushState({},'','/');document.querySelector('#thread').replaceChildren();});await expect(tick).toHaveCount(0);
  await page.evaluate(()=>addTurn(0,'<h2>不应带入历史会话的草稿</h2>'));await expect(tick).toHaveCount(1);
  await page.evaluate(()=>{const link=document.createElement('a');link.href='/c/existing-history';link.textContent='历史对话';link.addEventListener('click',e=>{e.preventDefault();history.pushState({},'','/c/existing-history');});document.body.append(link);link.click();link.remove();});
@@ -283,6 +347,7 @@ const assert=require('node:assert/strict');
  assert.equal(await outlineRoot.locator('.heading').evaluate(el=>getComputedStyle(el).webkitLineClamp),'3');
  await outlinePage.screenshot({path:path.join(__dirname,'../artifacts/preview-outline-width-wide.png')});
  await outlinePage.setViewportSize({width:1600,height:1000});await expect(outlineToc).toBeVisible();
+ await expect.poll(()=>outlineToc.evaluate(el=>el.getBoundingClientRect().width)).toBeLessThan(longWidth);
  const sideWidth=await outlineToc.evaluate(el=>el.getBoundingClientRect().width);
  assert(sideWidth<longWidth&&sideWidth>=240,'页边空位有限时应自动收窄');
  const sidePosition=await outlinePage.evaluate(()=>({panel:document.querySelector('#dual-navigator-host').shadowRoot.querySelector('.toc').getBoundingClientRect().toJSON(),content:DualNav.adapter.getContentRect(document.querySelector('main'))}));
@@ -295,5 +360,35 @@ const assert=require('node:assert/strict');
  await expect.poll(()=>outlineToc.evaluate(el=>el.getBoundingClientRect().width)).toBeLessThan(360);
  const smallBounds=await outlineToc.evaluate(el=>el.getBoundingClientRect().toJSON());assert(smallBounds.left>=11&&smallBounds.right<=389,'极窄窗口浮层仍在可视区域内');
  console.log('PASS 卡片标题语义排除、正文同名标题和文档保留、阅读卡片时高亮外层、长标题与页边宽度自适应');
+ const syncPage=await browser.newPage({viewport:{width:1600,height:1000},reducedMotion:'reduce'});
+ await syncPage.route('https://chatgpt.com/**',route=>route.fulfill({path:path.join(__dirname,'fixture.html'),contentType:'text/html'}));
+ await syncPage.goto('https://chatgpt.com/c/draft-test-start');
+ for(const script of ['adapter','model','content'])await syncPage.addScriptTag({path:path.join(__dirname,`../src/${script}.js`)});
+ await require('./draft-scenario.cjs')(syncPage);
+ console.log('PASS 编码临时地址、正式URL保留临时容器、跳过临时URL、持续生成、手动状态及历史隔离');
+ await syncPage.evaluate(()=>{
+   window.scanCalls=0;const scan=DualNav.adapter.scan;
+   DualNav.adapter.scan=(...args)=>{scanCalls++;return scan(...args);};
+   const panel=document.createElement('div');panel.id='animated-native-panel';
+   panel.dataset.summaryPanelVariant='summary';panel.setAttribute('role','complementary');
+   panel.style.cssText='position:fixed;right:20px;top:58px;width:420px;height:90vh';
+   panel.innerHTML='<p>预览内容</p>';document.querySelector('main').append(panel);
+ });
+ await syncPage.waitForTimeout(350);
+ await syncPage.evaluate(()=>{scanCalls=0;});
+ await syncPage.evaluate(async()=>{
+   const panel=document.querySelector('#animated-native-panel');
+   for(let frame=0;frame<60;frame++){
+     panel.style.transform=`translateX(${(60-frame)/3}px)`;
+     panel.querySelector('p').textContent=`预览流式更新 ${frame}`;
+     await new Promise(requestAnimationFrame);
+   }
+ });
+ await syncPage.waitForTimeout(350);
+ assert.equal(await syncPage.evaluate(()=>scanCalls),0,'预览动画和预览文本更新不得重扫整段聊天');
+ await syncPage.evaluate(()=>document.querySelector('#thread h2').textContent='真正的聊天标题变化');
+ await expect(syncPage.locator('#dual-navigator-host').locator('.heading')).toHaveText('真正的聊天标题变化');
+ assert((await syncPage.evaluate(()=>scanCalls))>0,'聊天正文变化仍需及时扫描');
+ console.log('PASS 60帧预览动画和流式内容更新不触发聊天扫描，聊天标题仍动态同步');
  await browser.close();
 })().catch(e=>{console.error(e);process.exitCode=1;setTimeout(()=>process.exit(1),100);});
