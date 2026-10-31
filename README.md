@@ -14,7 +14,7 @@
 
 ## 安装
 
-支持加载 Manifest V3 扩展的 Chrome 和 Edge。此项目无需构建，可以使用 GitHub Releases 中的 ZIP，也可以直接加载本仓库。
+支持加载 Manifest V3 扩展的 Chrome 和 Edge。此项目无需构建，可以使用 [GitHub Releases](https://github.com/Owenwoow/ChatGPT-Conversation-Map/releases) 中的 ZIP，也可以直接加载本仓库。
 
 1. 下载发行 ZIP 并解压到固定目录，或者下载本仓库源码。
 2. 在 Chrome 打开 `chrome://extensions`，或在 Edge 打开 `edge://extensions`。
