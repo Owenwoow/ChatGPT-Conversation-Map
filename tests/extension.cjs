@@ -1,0 +1,46 @@
+const {chromium,expect}=require('@playwright/test');
+const fs=require('node:fs/promises');
+const path=require('node:path');
+(async()=>{
+ const dir=path.resolve(__dirname,'..');
+ const profile=await fs.mkdtemp(path.join(dir,'artifacts/profile-'));
+ let context;
+ try {
+  context=await chromium.launchPersistentContext(profile,{headless:true,channel:'chromium',viewport:{width:1600,height:1000},args:[`--disable-extensions-except=${dir}`,`--load-extension=${dir}`]});
+  const page=await context.newPage();
+  await context.route('https://chatgpt.com/**',route=>route.fulfill({path:path.join(__dirname,'fixture.html'),contentType:'text/html'}));
+  await page.goto('https://chatgpt.com/c/extension-test');
+  const root=page.locator('#dual-navigator-host');await expect(root.locator('.tick')).toHaveCount(8);
+  console.log('PASS Manifest V3 真实加载及声明式脚本注入');
+  const manager=await context.newPage();await manager.goto('chrome://extensions');
+  const item=manager.locator('extensions-item').filter({hasText:'ChatGPT 对话地图'});
+  await expect(item).toHaveCount(1);const id=await item.getAttribute('id');
+  const popup=await context.newPage();await popup.goto(`chrome-extension://${id}/popup/index.html`);
+  await expect(popup.locator('#leftEnabled')).toBeChecked();
+  await popup.locator('#leftEnabled').uncheck();await expect(root.locator('.rail')).toBeHidden();
+  await popup.locator('#leftEnabled').check();await expect(root.locator('.rail')).toBeVisible();
+  await popup.locator('#rightEnabled').uncheck();await expect(root.locator('.toc')).toBeHidden();
+  await popup.reload();await expect(popup.locator('#rightEnabled')).not.toBeChecked();
+  await popup.locator('#rightEnabled').check();await expect(root.locator('.toc')).toBeVisible();
+  console.log('PASS 扩展弹窗、设置保存、跨页面即时生效');
+  await popup.locator('#autoCollapse').check();
+  await page.locator('#dual-navigator-host').locator('.toc').hover();await page.mouse.move(900,500);
+  await expect(root.locator('.toc')).toBeHidden();
+  await page.evaluate(()=>{const button=document.createElement('button');button.dataset.testid='stop-button';document.querySelector('main').append(button);});
+  await expect(root.locator('.toc')).toBeVisible();
+  await root.locator('.heading').last().focus();await page.keyboard.press('Tab');
+  await expect(root.locator('.toc')).toBeHidden();
+  await root.locator('.open').click();await expect(root.locator('.toc')).toBeVisible();
+  await root.locator('.collapse').click();await root.locator('.open').click();await root.locator('.toc').hover();await page.mouse.move(900,500);await page.waitForTimeout(900);await expect(root.locator('.toc')).toBeVisible();
+  console.log('PASS 自动收起、Tab离开自动收起、生成时自动展开、手动展开保持到手动关闭');
+  await expect(root.locator('.star-toggle,.stars-filter,.toc-title,.pin')).toHaveCount(0);
+  await expect(root.locator('.collapse')).toHaveText('−');
+  await root.locator('.collapse').click();
+  await page.setViewportSize({width:600,height:800});
+  await expect(root.locator('.open')).toBeVisible();await root.locator('.open').click();
+  await expect(root.locator('.toc')).toBeVisible();await expect(root.locator('.toc')).toHaveClass(/overlay/);
+  await root.locator('.heading').first().click();await expect(root.locator('.toc')).toBeVisible();
+  await root.locator('.collapse').click();await expect(root.locator('.toc')).toBeHidden();
+  console.log('PASS 原版左侧功能、精简目录与收起图标；窄屏可手动展开跳转关闭');
+ } finally {await context?.close();await fs.rm(profile,{recursive:true,force:true});}
+})().catch(e=>{console.error(e);process.exitCode=1;});

@@ -1,0 +1,65 @@
+name: 测试与发布
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install chromium
+      - run: npm test
+      - run: npm run test:browser
+      - run: npm run test:extension
+      - name: 检查版本一致性
+        shell: pwsh
+        run: |
+          $manifest = Get-Content -Raw manifest.json | ConvertFrom-Json
+          $package = Get-Content -Raw package.json | ConvertFrom-Json
+          $lock = Get-Content -Raw package-lock.json | ConvertFrom-Json
+          if ($manifest.version -ne $package.version -or $manifest.version -ne $lock.version) {
+            throw 'manifest.json、package.json 和 package-lock.json 的版本不一致。'
+          }
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$($manifest.version)") {
+            throw '标签必须与 manifest.json 的版本一致，例如 v1.0.4。'
+          }
+      - run: npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension-zip
+          path: release/*.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: test-and-package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: extension-zip
+          path: release
+      - name: 创建 GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release create "$RELEASE_TAG" release/*.zip --verify-tag --generate-notes
