@@ -3,6 +3,7 @@ const fs=require('node:fs/promises');
 const path=require('node:path');
 (async()=>{
  const dir=path.resolve(__dirname,'..');
+ await fs.mkdir(path.join(dir,'artifacts'),{recursive:true});
  const profile=await fs.mkdtemp(path.join(dir,'artifacts/profile-'));
  let context;
  try {

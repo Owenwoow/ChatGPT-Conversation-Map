@@ -46,6 +46,8 @@ ChatGPT 的页面结构、灰度功能和虚拟化行为可能变化。自动化
 
 需要 Node.js、npm、PowerShell 和 Playwright 的 Chromium 浏览器。项目源码无需编译：
 
+开发时可在单独的 Chrome 用户档案中，通过扩展管理页的「加载已解压的扩展程序」直接选择本仓库根目录。修改代码后，在扩展管理页重新加载扩展，再刷新已有的 ChatGPT 标签页；不需要每次打包或复制文件。普通用户可以从上方 Releases 下载发行包。
+
 ```powershell
 npm install
 npx playwright install chromium
