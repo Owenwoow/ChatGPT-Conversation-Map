@@ -22,6 +22,8 @@
   const branchAnimations = new Map();
   let panelTarget = null, panelAnimation = null, branchNumber = 0;
   let preferredPanelWidth = 280;
+  let bookmarks = new Set(), bookmarkRoute = '', bookmarkLoading = false, bookmarkVersion = 0;
+  let previewTurnId = null, previewTick = null, previewHideTimer = 0;
   const folded = new Set();
   const host = document.createElement('div');
   host.id = 'dual-navigator-host';
@@ -32,12 +34,14 @@
     *{box-sizing:border-box}button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;padding:0}button:focus-visible{outline:2px solid var(--dn-text);outline-offset:3px}button:hover{color:var(--dn-strong)}[hidden]{display:none!important}
     .rail{position:fixed;width:30px;max-height:66vh;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;pointer-events:auto;padding:8px 2px;display:flex;flex-direction:column;gap:3px;align-items:center;border-radius:10px}.rail::-webkit-scrollbar{display:none}.tick{height:13px;min-height:7px;width:26px;display:flex;align-items:center;justify-content:flex-start;border-radius:3px;flex-shrink:0}.tick:after{content:"";height:2px;width:9px;background:var(--dn-text);opacity:.37;border-radius:2px;transition:width .16s,opacity .16s}.tick:nth-child(5n):after{width:15px}.tick:hover:after{width:21px;opacity:.8}.tick.active:after{width:23px;opacity:1;background:var(--dn-strong)}
     .preview{pointer-events:auto;position:fixed;width:330px;padding:14px 16px;border:1px solid var(--dn-line);border-radius:16px;background:var(--dn-bg);box-shadow:var(--dn-shadow)}.eyebrow{font-size:10px;letter-spacing:.04em;color:var(--dn-text);margin-bottom:7px}.question{font-size:13px;font-weight:600;color:var(--dn-strong);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.answer{margin:7px 0 0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;color:var(--dn-text);line-height:1.7}
+    .tick{position:relative}.tick.marked:before{content:"";position:absolute;right:0;width:3px;height:3px;border-radius:50%;background:var(--dn-strong)}.preview .question{padding-right:25px}.bookmark-toggle{position:absolute;right:11px;top:11px;width:26px;height:26px;border-radius:6px;display:grid;place-items:center}.bookmark-toggle:hover{background:var(--dn-hover)}.bookmark-toggle svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linejoin:round}.bookmark-toggle[aria-pressed=true] svg{fill:var(--dn-strong);stroke:var(--dn-strong)}.bookmark-toggle:disabled{opacity:.35;cursor:default}
     .toc{position:fixed;width:280px;pointer-events:auto;max-height:calc(100vh - 180px);display:flex;flex-direction:column;transform-origin:top right}.toc[data-state=opening],.toc[data-state=closing]{will-change:opacity,transform}.toc[data-state=closing]{pointer-events:none}.toc.overlay{padding:8px;border:1px solid var(--dn-line);border-radius:12px;background:var(--dn-bg);box-shadow:var(--dn-shadow)}.toc-head{display:flex;justify-content:flex-end;margin-bottom:2px;padding:0 3px}.icon{width:26px;height:26px;border-radius:6px;font-size:18px}.icon:hover{background:var(--dn-hover);color:var(--dn-strong)}.tree{overflow:auto;scrollbar-width:thin;scrollbar-color:var(--dn-line) transparent;overscroll-behavior:contain;padding:3px 3px 10px;min-height:0}.branch{position:relative}.children{margin-left:10px;padding-left:6px;border-left:1px solid var(--dn-line);overflow:hidden}.row{display:flex;align-items:flex-start;margin:2px 0;min-height:29px}.row:hover>.heading,.row.active>.heading{background:var(--dn-hover)}.row.active>.heading{color:var(--dn-strong)}.heading{padding:6px 8px;text-align:left;line-height:1.55;flex:1;min-width:0;border-radius:6px;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.heading:focus-visible{outline-offset:-2px}.disclosure{width:22px;min-width:22px;min-height:29px;padding:6px 0;opacity:.7;font-size:12px;border-radius:5px}.disclosure:hover{background:var(--dn-hover);opacity:1}.chevron{display:block;transition:transform 160ms cubic-bezier(.2,.8,.2,1)}.disclosure[aria-expanded=true] .chevron{transform:rotate(90deg)}.leaf{width:22px;flex-shrink:0}.open{position:fixed;pointer-events:auto;width:30px;height:30px;border-radius:8px;background:var(--dn-bg);color:var(--dn-text);font-size:21px}.open:hover{background:var(--dn-hover)}.icon,.open,.heading,.disclosure{transition:background-color 120ms ease,color 120ms ease,transform 100ms ease}.icon:active,.open:active{transform:scale(.9)}.heading:active{transform:translateX(1px) scale(.985)}.disclosure:active{transform:scale(.92)}.status{position:fixed;bottom:110px;left:50%;transform:translateX(-50%);background:var(--dn-bg);color:var(--dn-strong);padding:10px 16px;border:1px solid var(--dn-line);border-radius:12px;box-shadow:var(--dn-shadow);max-width:min(90vw,420px)}
     @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}@media(max-width:700px){.preview{width:260px}}
-  </style><nav class="rail" aria-label="对话轮次" hidden></nav><aside class="preview" hidden><div class="eyebrow"></div><div class="question"></div><p class="answer"></p></aside><aside class="toc" id="answer-outline" aria-label="当前回答目录" hidden><header class="toc-head"><button class="icon collapse" aria-label="收起目录" title="收起目录">−</button></header><div class="tree"></div></aside><button class="open" aria-label="展开回答目录" aria-controls="answer-outline" aria-expanded="false" title="展开回答目录" hidden>≡</button><div class="status" role="status" hidden></div>`;
+  </style><nav class="rail" aria-label="对话轮次" hidden></nav><aside class="preview" hidden><div class="eyebrow"></div><div class="question"></div><button class="bookmark-toggle" type="button" aria-label="标记此轮对话" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 21V5a3 3 0 0 1 3-3h6a3 3 0 0 1 3 3v16l-6-4z"></path></svg></button><p class="answer"></p></aside><aside class="toc" id="answer-outline" aria-label="当前回答目录" hidden><header class="toc-head"><button class="icon collapse" aria-label="收起目录" title="收起目录">−</button></header><div class="tree"></div></aside><button class="open" aria-label="展开回答目录" aria-controls="answer-outline" aria-expanded="false" title="展开回答目录" hidden>≡</button><div class="status" role="status" hidden></div>`;
   document.documentElement.append(host);
   const $ = selector => shadow.querySelector(selector);
   const rail = $('.rail'), toc = $('.toc'), tree = $('.tree'), preview = $('.preview'), opener = $('.open');
+  const bookmarkButton = $('.bookmark-toggle');
   function button(label, className, fn) {
     const el = document.createElement('button'); el.className = className; el.type='button';
     el.setAttribute('aria-label',label); el.addEventListener('click',fn); return el;
@@ -127,11 +131,46 @@
     if(token!==navigation)return;
     $('.status').hidden=true; scrollToElement(element); schedulePosition();
   }
+  function bookmarkPrefix(key) {return `dualNavBookmark:${encodeURIComponent(key)}:`;}
+  function bookmarkKey(key, id) {return bookmarkPrefix(key)+encodeURIComponent(id);}
+  function updateBookmarkButton() {
+    const marked=bookmarks.has(previewTurnId);
+    const stable=previewTurnId && !previewTurnId.startsWith('local-') && !adapter.isDraftKey(currentKey);
+    bookmarkButton.disabled=!stable || bookmarkLoading || !globalThis.chrome?.storage?.local;
+    bookmarkButton.setAttribute('aria-pressed',String(marked));
+    bookmarkButton.setAttribute('aria-label',marked?'取消标记此轮对话':'标记此轮对话');
+    bookmarkButton.title=stable?(marked?'取消标记':'标记此轮对话'):(adapter.isDraftKey(currentKey)?'会话保存后可标记此轮对话':'当前轮次暂不可标记');
+  }
+  function loadBookmarks(key) {
+    const version=++bookmarkVersion;
+    if(bookmarkRoute!==key){bookmarkRoute=key;bookmarks=new Set();}
+    bookmarkLoading=!!globalThis.chrome?.storage?.local && !adapter.isDraftKey(key);
+    updateBookmarkButton();
+    if(!bookmarkLoading){renderRail();return;}
+    chrome.storage.local.get(null).then(items=>{
+      if(version!==bookmarkVersion || currentKey!==key)return;
+      const prefix=bookmarkPrefix(key), found=new Set();
+      for(const [name,value] of Object.entries(items)) {
+        if(name.startsWith(prefix) && value===true) {
+          try {found.add(decodeURIComponent(name.slice(prefix.length)));} catch {}
+        }
+      }
+      bookmarks=found;bookmarkLoading=false;renderRail();updateBookmarkButton();
+    }).catch(()=>{if(version===bookmarkVersion){bookmarkLoading=false;updateBookmarkButton();notify('无法读取本地标记');}});
+  }
+  function schedulePreviewHide() {
+    clearTimeout(previewHideTimer);
+    previewHideTimer=setTimeout(()=>{
+      if(!preview.matches(':hover') && !preview.matches(':focus-within') && !rail.matches(':hover') && !rail.matches(':focus-within'))preview.hidden=true;
+    },300);
+  }
   function showPreview(turn, tick) {
+    clearTimeout(previewHideTimer);previewTurnId=turn.id;previewTick=tick;
     const r=tick.getBoundingClientRect();
     $('.eyebrow').textContent=`第 ${turn.ordinal} 轮${liveElement(turn)?'':' · 暂未加载'}`;
     $('.question').textContent=turn.user?.text?.slice(0,160)||'（无文本提问）';
     $('.answer').textContent=turn.assistant?.text?.slice(0,260)||'等待回答…';
+    updateBookmarkButton();
     preview.hidden=false;
     preview.style.left=`${Math.min(r.right+12,innerWidth-preview.offsetWidth-12)}px`;
     preview.style.top=`${Math.max(12,Math.min(r.top-25,innerHeight-preview.offsetHeight-16))}px`;
@@ -142,16 +181,20 @@
       railSignature=sig; rail.replaceChildren();
       for(const turn of turns) {
         const tick=button(`第 ${turn.ordinal} 轮：${turn.user?.text?.slice(0,60)||'对话'}`,'tick',()=>navigate(turn.id));
+        tick.dataset.baseLabel=tick.getAttribute('aria-label');
         tick.dataset.id=turn.id;
         tick.addEventListener('mouseenter',()=>showPreview(turns.find(t=>t.id===turn.id)||turn,tick));
         tick.addEventListener('focus',()=>showPreview(turns.find(t=>t.id===turn.id)||turn,tick));
-        tick.addEventListener('mouseleave',()=>{preview.hidden=true;});
-        tick.addEventListener('blur',()=>{preview.hidden=true;});rail.append(tick);
+        tick.addEventListener('keydown',event=>{if(event.key==='Tab'&&!event.shiftKey&&!bookmarkButton.disabled){event.preventDefault();bookmarkButton.focus();}});
+        tick.addEventListener('mouseleave',schedulePreviewHide);
+        tick.addEventListener('blur',schedulePreviewHide);rail.append(tick);
       }
     }
     for(const tick of rail.children) {
       const isActive=tick.dataset.id===active?.id;
       tick.classList.toggle('active',isActive);
+      tick.classList.toggle('marked',bookmarks.has(tick.dataset.id));
+      tick.setAttribute('aria-label',tick.dataset.baseLabel+(bookmarks.has(tick.dataset.id)?'，已标记':''));
       if(isActive)tick.setAttribute('aria-current','step');else tick.removeAttribute('aria-current');
     }
   }
@@ -308,7 +351,7 @@
       clearTimeout(closeTimer);hovering=false;
       preview.hidden=true;
     }
-    if(pathChanged){explicitNavigation=false;draftSendAt=0;}
+    if(pathChanged){explicitNavigation=false;draftSendAt=0;loadBookmarks(currentKey);}
     if(snapshot.draftId)pendingDraftId=snapshot.draftId;
     else if(snapshot.routeConfirmed)pendingDraftId=null;
     if(snapshot.routeConfirmed)routeExclusions=new WeakMap();
@@ -329,6 +372,21 @@
       if(settings.autoCollapse&&!hovering&&!temporaryOpen&&!toc.matches(':focus-within')){manualClosed=true;position();}
     },650);
   }
+  bookmarkButton.addEventListener('click',async()=>{
+    const key=currentKey, id=previewTurnId;
+    if(bookmarkButton.disabled || !id)return;
+    const marked=bookmarks.has(id), storageKey=bookmarkKey(key,id);
+    bookmarkButton.disabled=true;
+    try {
+      if(marked)await chrome.storage.local.remove(storageKey);
+      else await chrome.storage.local.set({[storageKey]:true});
+      if(currentKey===key){if(marked)bookmarks.delete(id);else bookmarks.add(id);renderRail();updateBookmarkButton();}
+    } catch {if(currentKey===key){updateBookmarkButton();notify('标记保存失败，请重试');}}
+  });
+  bookmarkButton.addEventListener('keydown',event=>{if(event.key==='Tab'&&event.shiftKey&&previewTick?.isConnected){event.preventDefault();previewTick.focus();}});
+  preview.addEventListener('mouseenter',()=>clearTimeout(previewHideTimer));
+  preview.addEventListener('mouseleave',schedulePreviewHide);
+  preview.addEventListener('focusout',schedulePreviewHide);
   $('.collapse').addEventListener('click',()=>{manualClosed=true;userClosed=true;temporaryOpen=false;panelTemporaryOpen=false;position();opener.focus({preventScroll:true});});
   opener.addEventListener('click',()=>{
     manualClosed=false;userClosed=false;temporaryOpen=true;panelTemporaryOpen=true;clearTimeout(closeTimer);position();$('.collapse').focus({preventScroll:true});
@@ -407,7 +465,7 @@
   setInterval(()=>{if(adapter.getKey()!==currentKey) scheduleScan();},800);
   if(globalThis.chrome?.storage) {
     chrome.storage.local.get(defaults).then(value=>{settings={...defaults,...value};scheduleScan();}).catch(()=>{});
-    chrome.storage.onChanged.addListener((changes,area)=>{if(area!=='local')return;for(const key of Object.keys(defaults))if(changes[key])settings[key]=changes[key].newValue??defaults[key];scheduleScan();});
+    chrome.storage.onChanged.addListener((changes,area)=>{if(area!=='local')return;for(const key of Object.keys(defaults))if(changes[key])settings[key]=changes[key].newValue??defaults[key];if(Object.keys(changes).some(key=>key.startsWith(bookmarkPrefix(currentKey))))loadBookmarks(currentKey);scheduleScan();});
   }
   refresh();
 })();
