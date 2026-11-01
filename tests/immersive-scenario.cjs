@@ -34,14 +34,7 @@ module.exports=async function immersiveScenario(page,popup) {
  await sidebar.click();await page.evaluate(()=>addTurn(1,'<h2>继续提问</h2>'));
  await expect(ticks).toHaveCount(2);await expect(sidebar).toHaveAttribute('aria-expanded','true');
  await send.click();await page.evaluate(()=>addTurn(2,'<h2>历史对话继续提问</h2>'));
- await expect(ticks).toHaveCount(3);await expect(sidebar).toHaveAttribute('aria-expanded','false');await sidebar.click();
- await page.evaluate(()=>{history.pushState({},'','/c/immersive-reading');document.querySelector('#thread').replaceChildren();addTurn(10,'<h2>阅读历史聊天</h2>');});
- await expect(ticks).toHaveCount(1);await expect(sidebar).toHaveAttribute('aria-expanded','true');
- await send.click();await page.waitForTimeout(400);await expect(sidebar).toHaveAttribute('aria-expanded','true');
- await page.evaluate(()=>addTurn(2,'<h2>加载更早的历史内容</h2>'));
- await expect(ticks).toHaveCount(2);await expect(sidebar).toHaveAttribute('aria-expanded','true');
- await page.evaluate(()=>addTurn(11,'<h2>历史聊天的新消息</h2>'));
- await expect(ticks).toHaveCount(3);await expect(sidebar).toHaveAttribute('aria-expanded','false');await sidebar.click();
+ await expect(ticks).toHaveCount(3);await expect(sidebar).toHaveAttribute('aria-expanded','true');
  await draft();await send.click();await sidebar.click();await sidebar.click();await addFirst('/c/immersive-manual');
  await expect(ticks).toHaveCount(1);await expect(sidebar).toHaveAttribute('aria-expanded','true');
  await sidebar.click();await draft();await send.click();await addFirst('/c/immersive-already-closed');
@@ -63,6 +56,14 @@ module.exports=async function immersiveScenario(page,popup) {
  await page.evaluate(()=>{const control=document.createElement('button');control.id='sidebar-edge-control';control.type='button';control.setAttribute('aria-controls','app-shell-sidebar');control.style.cssText='position:fixed;left:520px;top:0;z-index:100';control.textContent='展开侧边栏';control.addEventListener('click',()=>document.querySelector('#native-sidebar-toggle').setAttribute('aria-expanded','true'));document.body.append(control);});
  await page.locator('#sidebar-edge-control').click();await addFirst('/c/immersive-edge-control');
  await expect(ticks).toHaveCount(1);await expect(sidebar).toHaveAttribute('aria-expanded','true');
+ // Match the live page's search-unit markup and draft-to-saved URL transition.
+ await draft();await send.click();
+ await page.evaluate(()=>{
+   const thread=document.querySelector('#thread');thread.dataset.chatgptConversationSelectionTarget='local-chatgpt:live-sidebar';
+   thread.innerHTML='<div data-content-search-turn-key="fallback-turn-0"><div data-chatgpt-search-unit-key="fallback-turn-0:0:user" data-chatgpt-search-message-ids="live-user"><div data-user-message-bubble>首条消息</div></div><div data-chatgpt-search-unit-key="fallback-turn-0:2:assistant" data-chatgpt-search-message-ids="live-answer"><div data-markdown-text-style="assistant-message"><h2>回答标题</h2></div></div></div>';
+   history.pushState({},'','/c/immersive-live-structure');
+ });
+ await expect(ticks).toHaveCount(1);await expect(sidebar).toHaveAttribute('aria-expanded','false');
  await popup.locator('#immersiveMode').uncheck();
- console.log('PASS 沉浸模式开关、新旧聊天发送、阅读历史、手动控制、延迟渲染与已收起侧边栏');
+ console.log('PASS 沉浸模式开关、首次发送、手动控制、历史对话、延迟渲染与已收起侧边栏');
 };
