@@ -1,4 +1,4 @@
-const defaults = {leftEnabled:true,rightEnabled:true,autoExpand:true,autoCollapse:false,outlineWidth:'auto'};
+const defaults = {leftEnabled:true,rightEnabled:true,autoExpand:true,autoCollapse:false,outlineWidth:'auto',immersiveMode:false};
 chrome.storage.local.get(defaults).then(settings => {
   for (const key of Object.keys(defaults)) {
     const input = document.getElementById(key);

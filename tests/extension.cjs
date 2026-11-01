@@ -80,5 +80,6 @@ const path=require('node:path');
   await popup.locator('#autoCollapse').uncheck();
   await require('./draft-scenario.cjs')(page);
   console.log('PASS 真实MV3隔离环境下临时会话转正式会话，首次目录动态更新且保持历史隔离');
+  await require('./immersive-scenario.cjs')(page,popup);
  } finally {await context?.close();await fs.rm(profile,{recursive:true,force:true});}
 })().catch(e=>{console.error(e);process.exitCode=1;});

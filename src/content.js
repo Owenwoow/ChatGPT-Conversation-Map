@@ -5,13 +5,14 @@
   console.info(`[Dual Navigator] starting build ${build}`);
   const {adapter, ConversationStore, buildTree} = globalThis.DualNav;
   const store = new ConversationStore();
-  const defaults = {leftEnabled:true,rightEnabled:true,autoExpand:true,autoCollapse:false,outlineWidth:'auto'};
+  const defaults = {leftEnabled:true,rightEnabled:true,autoExpand:true,autoCollapse:false,outlineWidth:'auto',immersiveMode:false};
   let settings = {...defaults}, snapshot, turns = [], active = null, activeHeading = null;
   let currentKey = '', manualClosed = false, userClosed = false, compact = false, hovering = false, temporaryOpen = false;
   let wasStreaming = false, treeSignature = null, railSignature = null, frame = 0, timer = 0;
   let navigation = 0, targetLock = null, scrollRoot = null, closeTimer = 0;
   let lastRailActive = null, seenRouteMessages = new Map(), routeExclusions = new WeakMap();
   let draftSendAt = 0, explicitNavigation = false;
+  let immersivePending = null, immersiveTimer = 0;
   let pendingDraftId = null;
   let observedMain = null;
   let nativePanel = null, panelTemporaryOpen = false;
@@ -321,6 +322,30 @@
     host.style.setProperty('--dn-line',dark?'#3c3c3c':'#e4e4e4');
     host.style.setProperty('--dn-hover',dark?'#ffffff0e':'#00000007');
   }
+  function cancelImmersive() {immersivePending=null;clearTimeout(immersiveTimer);immersiveTimer=0;}
+  function noteDraftSend() {
+    const key=adapter.getKey();
+    if(!settings.immersiveMode || !adapter.isDraftKey(key) || immersivePending)return;
+    const current=adapter.scan();
+    if(current.messages.some(message=>message.role==='user'))return;
+    immersivePending={at:Date.now(),key,savedKey:null};
+  }
+  function maybeCollapseSidebar(nextSnapshot, navigating) {
+    const pending=immersivePending;
+    if(!pending)return;
+    if(!settings.immersiveMode || navigating || Date.now()-pending.at>15000){cancelImmersive();return;}
+    if(nextSnapshot.key!==pending.key && !adapter.isDraftKey(nextSnapshot.key)) {
+      if(pending.savedKey && pending.savedKey!==nextSnapshot.key){cancelImmersive();return;}
+      pending.savedKey=nextSnapshot.key;
+    } else if(nextSnapshot.key!==pending.key && pending.savedKey && nextSnapshot.key!==pending.savedKey && adapter.isDraftKey(nextSnapshot.key)) {
+      cancelImmersive();return;
+    }
+    if(!nextSnapshot.main || !nextSnapshot.messages.some(message=>message.role==='user'))return;
+    const sidebar=adapter.sidebarState();
+    if(!sidebar){if(!immersiveTimer)immersiveTimer=setTimeout(()=>{immersiveTimer=0;scheduleScan();},250);return;}
+    cancelImmersive();
+    if(sidebar.open)sidebar.button.click();
+  }
   function refresh() {
     clearTimeout(timer);timer=0;
     if(explicitNavigation || (currentKey&&!adapter.isDraftKey(currentKey)&&adapter.getKey()!==currentKey))pendingDraftId=null;
@@ -333,7 +358,7 @@
         if(column)layoutObserver.observe(column);
       }
     }
-    const pathChanged=snapshot.key!==currentKey;
+    const pathChanged=snapshot.key!==currentKey, navigating=explicitNavigation;
     // Sending the first message promotes the same mounted draft into /c/<id>.
     // Preserve it; it is not a switch to a different conversation.
     if(currentKey && adapter.isDraftKey(currentKey) && snapshot.key.includes('/c/') && !explicitNavigation &&
@@ -357,6 +382,7 @@
     else if(snapshot.routeConfirmed)pendingDraftId=null;
     if(snapshot.routeConfirmed)routeExclusions=new WeakMap();
     snapshot={...snapshot,messages:snapshot.messages.filter(m=>routeExclusions.get(m.element)!==`${m.id}\n${m.text}`)};
+    maybeCollapseSidebar(snapshot,navigating);
     for(const message of snapshot.messages)seenRouteMessages.set(message.element,`${message.id}\n${message.text}`);
     turns=store.update(snapshot);
     const nextRoot=snapshot.scrollRoot||document.scrollingElement;
@@ -407,7 +433,7 @@
   window.addEventListener('wheel',cancelNavigation,{passive:true});
   window.addEventListener('touchstart',cancelNavigation,{passive:true});
   window.addEventListener('keydown',e=>{
-    if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&adapter.isComposer(e.target)){draftSendAt=Date.now();explicitNavigation=false;}
+    if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&adapter.isComposer(e.target)){draftSendAt=Date.now();explicitNavigation=false;noteDraftSend();}
     if(['PageDown','PageUp','ArrowDown','ArrowUp','Home','End'].includes(e.key))cancelNavigation();
     if(e.key==='Escape'){
       const inside=toc.matches(':focus-within')||shadow.activeElement===opener;
@@ -418,10 +444,12 @@
     }
   },true);
   document.addEventListener('click',e=>{
-    if(adapter.isSendButton(e.target)){draftSendAt=Date.now();explicitNavigation=false;}
+    if(e.target.closest?.(adapter.selectors.sidebarControl))cancelImmersive();
+    if(adapter.isSendButton(e.target)){draftSendAt=Date.now();explicitNavigation=false;noteDraftSend();}
     const href=e.target.closest?.('a[href]')?.href;
-    if(href){const url=new URL(href,location.href);if(url.origin===location.origin&&url.pathname!==currentKey)explicitNavigation=true;}
+    if(href){const url=new URL(href,location.href);if(url.origin===location.origin&&url.pathname!==currentKey){explicitNavigation=true;cancelImmersive();}}
   },true);
+  document.addEventListener('submit',e=>{if(e.target.matches?.('form[data-chatgpt-composer]'))noteDraftSend();},true);
   new MutationObserver(records=>{
     // A page hydration/recovery can remove nodes outside body or replace body.
     // Keep the original host and listeners, then scan the current page again.
@@ -466,7 +494,7 @@
   setInterval(()=>{if(adapter.getKey()!==currentKey) scheduleScan();},800);
   if(globalThis.chrome?.storage) {
     chrome.storage.local.get(defaults).then(value=>{settings={...defaults,...value};scheduleScan();}).catch(()=>{});
-    chrome.storage.onChanged.addListener((changes,area)=>{if(area!=='local')return;for(const key of Object.keys(defaults))if(changes[key])settings[key]=changes[key].newValue??defaults[key];if(Object.keys(changes).some(key=>key.startsWith(bookmarkPrefix(currentKey))))loadBookmarks(currentKey);scheduleScan();});
+    chrome.storage.onChanged.addListener((changes,area)=>{if(area!=='local')return;for(const key of Object.keys(defaults))if(changes[key])settings[key]=changes[key].newValue??defaults[key];if(!settings.immersiveMode)cancelImmersive();if(Object.keys(changes).some(key=>key.startsWith(bookmarkPrefix(currentKey))))loadBookmarks(currentKey);scheduleScan();});
   }
   refresh();
 })();

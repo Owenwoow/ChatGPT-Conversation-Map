@@ -13,6 +13,8 @@
     userBody: '[data-user-message-bubble]',
     contentColumn: '[data-thread-user-message-navigation-content]',
     sidePanel: '[data-summary-panel-variant], aside, [role="complementary"], [role="dialog"], [data-testid*="side-panel"], [data-testid*="sidebar"]',
+    sidebarTrigger: 'button[data-app-shell-sidebar-trigger][aria-controls="app-shell-sidebar"]',
+    sidebarControl: 'button[aria-controls="app-shell-sidebar"]',
     outlineExcluded: 'pre,code,[hidden],[inert],[aria-hidden="true"],[data-d-component="box"][data-d-has-border],[data-d-component="box"] [data-d-component="title"][data-d-tabular-nums="true"]',
     stop: '[data-testid="stop-button"], button[aria-label="Stop generating"], button[aria-label="停止生成"], button[aria-label="停止流式传输"]',
     streaming: '[data-is-streaming="true"], .result-streaming'
@@ -169,7 +171,13 @@
   function isSendButton(element) {
     return !!element?.closest?.('[data-testid="send-button"], [data-testid="composer-submit-button"], button[aria-label="Send prompt"], button[aria-label="发送提示"], button[aria-label="发送"]');
   }
-  ns.adapter = { scan, getKey, isDraftKey, getScrollRoot, getContentRect, getRightPanel, isComposer, isSendButton, selectors: SELECTORS };
+  function sidebarState() {
+    const buttons=Array.from(document.querySelectorAll(SELECTORS.sidebarTrigger)).filter(isVisible);
+    const open=buttons.find(button=>button.getAttribute('aria-expanded')==='true' && !button.disabled);
+    if(open)return {open:true,button:open};
+    return buttons.some(button=>button.getAttribute('aria-expanded')==='false')?{open:false,button:null}:null;
+  }
+  ns.adapter = { scan, getKey, isDraftKey, getScrollRoot, getContentRect, getRightPanel, isComposer, isSendButton, sidebarState, selectors: SELECTORS };
   // Direct aliases keep consumers independent of the adapter's internal organization.
   ns.scan = scan;
   ns.getScrollRoot = getScrollRoot;
