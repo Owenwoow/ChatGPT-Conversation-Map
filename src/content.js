@@ -25,6 +25,10 @@
   let preferredPanelWidth = 280;
   let bookmarks = new Set(), bookmarkRoute = '', bookmarkLoading = false, bookmarkVersion = 0;
   let previewTurnId = null, previewTick = null, previewHideTimer = 0;
+  const lifecycle = new AbortController();
+  let domObserver = null, themeObserver = null, routeInterval = 0, disposed = false;
+  let extensionRuntime = false;
+  try {extensionRuntime=!!globalThis.chrome?.runtime?.id;} catch {}
   const folded = new Set();
   const host = document.createElement('div');
   host.id = 'dual-navigator-host';
@@ -43,9 +47,26 @@
   const $ = selector => shadow.querySelector(selector);
   const rail = $('.rail'), toc = $('.toc'), tree = $('.tree'), preview = $('.preview'), opener = $('.open');
   const bookmarkButton = $('.bookmark-toggle');
+  function dispose() {
+    if(disposed)return;
+    disposed=true;lifecycle.abort();domObserver?.disconnect();themeObserver?.disconnect();layoutObserver.disconnect();
+    clearInterval(routeInterval);clearTimeout(timer);clearTimeout(closeTimer);clearTimeout(previewHideTimer);clearTimeout(immersiveTimer);clearTimeout(notify.timer);
+    cancelAnimationFrame(frame);cancelAnimationFrame(layoutFrame);cancelNavigation();
+    panelAnimation?.cancel();for(const animation of branchAnimations.values())animation.cancel();branchAnimations.clear();
+    host.remove();
+  }
+  function contextAlive() {
+    if(disposed)return false;
+    if(!extensionRuntime)return true;
+    try {if(globalThis.chrome?.runtime?.id)return true;} catch {}
+    dispose();return false;
+  }
+  function hasStorage() {
+    try {return !!globalThis.chrome?.storage?.local;} catch(error) {if(contextAlive())throw error;return false;}
+  }
   function button(label, className, fn) {
     const el = document.createElement('button'); el.className = className; el.type='button';
-    el.setAttribute('aria-label',label); el.addEventListener('click',fn); return el;
+    el.setAttribute('aria-label',label); el.addEventListener('click',event=>{if(contextAlive())fn(event);}); return el;
   }
   function notify(message) {
     $('.status').textContent=message; $('.status').hidden=false;
@@ -135,20 +156,23 @@
   function bookmarkPrefix(key) {return `dualNavBookmark:${encodeURIComponent(key)}:`;}
   function bookmarkKey(key, id) {return bookmarkPrefix(key)+encodeURIComponent(id);}
   function updateBookmarkButton() {
+    if(!contextAlive())return;
     const marked=bookmarks.has(previewTurnId);
     const stable=previewTurnId && !previewTurnId.startsWith('local-') && !adapter.isDraftKey(currentKey);
-    bookmarkButton.disabled=!stable || bookmarkLoading || !globalThis.chrome?.storage?.local;
+    bookmarkButton.disabled=!stable || bookmarkLoading || !hasStorage();
     bookmarkButton.setAttribute('aria-pressed',String(marked));
     bookmarkButton.setAttribute('aria-label',marked?'取消标记此轮对话':'标记此轮对话');
     bookmarkButton.title=stable?(marked?'取消标记':'标记此轮对话'):(adapter.isDraftKey(currentKey)?'会话保存后可标记此轮对话':'当前轮次暂不可标记');
   }
   function loadBookmarks(key) {
+    if(!contextAlive())return;
     const version=++bookmarkVersion;
     if(bookmarkRoute!==key){bookmarkRoute=key;bookmarks=new Set();}
-    bookmarkLoading=!!globalThis.chrome?.storage?.local && !adapter.isDraftKey(key);
+    bookmarkLoading=hasStorage() && !adapter.isDraftKey(key);
     updateBookmarkButton();
     if(!bookmarkLoading){renderRail();return;}
-    chrome.storage.local.get(null).then(items=>{
+    try {chrome.storage.local.get(null).then(items=>{
+      if(!contextAlive())return;
       if(version!==bookmarkVersion || currentKey!==key)return;
       const prefix=bookmarkPrefix(key), found=new Set();
       for(const [name,value] of Object.entries(items)) {
@@ -157,7 +181,8 @@
         }
       }
       bookmarks=found;bookmarkLoading=false;renderRail();updateBookmarkButton();
-    }).catch(()=>{if(version===bookmarkVersion){bookmarkLoading=false;updateBookmarkButton();notify('无法读取本地标记');}});
+    }).catch(()=>{if(contextAlive()&&version===bookmarkVersion){bookmarkLoading=false;updateBookmarkButton();notify('无法读取本地标记');}});
+    } catch {if(contextAlive()){bookmarkLoading=false;updateBookmarkButton();notify('无法读取本地标记');}}
   }
   function schedulePreviewHide() {
     clearTimeout(previewHideTimer);
@@ -166,6 +191,7 @@
     },300);
   }
   function showPreview(turn, tick) {
+    if(!contextAlive())return;
     clearTimeout(previewHideTimer);previewTurnId=turn.id;previewTick=tick;
     const r=tick.getBoundingClientRect();
     $('.eyebrow').textContent=`第 ${turn.ordinal} 轮${liveElement(turn)?'':' · 暂未加载'}`;
@@ -311,8 +337,8 @@
     }
     render();
   }
-  function schedulePosition(){if(!frame)frame=requestAnimationFrame(()=>{frame=0;updateActive();});}
-  function scheduleLayout(){if(!layoutFrame)layoutFrame=requestAnimationFrame(()=>{layoutFrame=0;position();});}
+  function schedulePosition(){if(contextAlive()&&!frame)frame=requestAnimationFrame(()=>{frame=0;if(contextAlive())updateActive();});}
+  function scheduleLayout(){if(contextAlive()&&!layoutFrame)layoutFrame=requestAnimationFrame(()=>{layoutFrame=0;if(contextAlive())position();});}
   function theme() {
     const dark=document.documentElement.classList.contains('dark') || document.documentElement.dataset.theme==='dark' || getComputedStyle(document.documentElement).colorScheme==='dark';
     host.style.setProperty('--dn-bg',dark?'#212121':'#fff');
@@ -347,6 +373,7 @@
     if(sidebar.open)sidebar.button.click();
   }
   function refresh() {
+    if(!contextAlive())return;
     clearTimeout(timer);timer=0;
     if(explicitNavigation || (currentKey&&!adapter.isDraftKey(currentKey)&&adapter.getKey()!==currentKey))pendingDraftId=null;
     snapshot=adapter.scan({draftId:pendingDraftId,allowDraft:!!currentKey&&adapter.isDraftKey(currentKey)&&!explicitNavigation});
@@ -386,13 +413,13 @@
     for(const message of snapshot.messages)seenRouteMessages.set(message.element,`${message.id}\n${message.text}`);
     turns=store.update(snapshot);
     const nextRoot=snapshot.scrollRoot||document.scrollingElement;
-    if(nextRoot!==scrollRoot){scrollRoot?.removeEventListener('scroll',schedulePosition);scrollRoot=nextRoot;scrollRoot?.addEventListener('scroll',schedulePosition,{passive:true});}
+    if(nextRoot!==scrollRoot){scrollRoot?.removeEventListener('scroll',schedulePosition);scrollRoot=nextRoot;scrollRoot?.addEventListener('scroll',schedulePosition,{passive:true,signal:lifecycle.signal});}
     if(snapshot.streaming&&!wasStreaming&&settings.autoExpand&&!userClosed){manualClosed=false;}
     wasStreaming=snapshot.streaming;
     if(active)active=turns.find(t=>t.id===active.id)||null;
     theme();updateActive();
   }
-  function scheduleScan(){if(!timer)timer=setTimeout(refresh,180);}
+  function scheduleScan(){if(contextAlive()&&!timer)timer=setTimeout(refresh,180);}
   function scheduleAutoClose() {
     clearTimeout(closeTimer);
     if(settings.autoCollapse&&!temporaryOpen&&!hovering)closeTimer=setTimeout(()=>{
@@ -400,6 +427,7 @@
     },650);
   }
   bookmarkButton.addEventListener('click',async()=>{
+    if(!contextAlive())return;
     const key=currentKey, id=previewTurnId;
     if(bookmarkButton.disabled || !id)return;
     const marked=bookmarks.has(id), storageKey=bookmarkKey(key,id);
@@ -408,7 +436,7 @@
       if(marked)await chrome.storage.local.remove(storageKey);
       else await chrome.storage.local.set({[storageKey]:true});
       if(currentKey===key){if(marked)bookmarks.delete(id);else bookmarks.add(id);renderRail();updateBookmarkButton();}
-    } catch {if(currentKey===key){updateBookmarkButton();notify('标记保存失败，请重试');}}
+    } catch {if(contextAlive()&&currentKey===key){updateBookmarkButton();notify('标记保存失败，请重试');}}
   });
   bookmarkButton.addEventListener('keydown',event=>{if(event.key==='Tab'&&event.shiftKey&&previewTick?.isConnected){event.preventDefault();previewTick.focus();}});
   preview.addEventListener('mouseenter',()=>clearTimeout(previewHideTimer));
@@ -426,12 +454,12 @@
     if(!motionPreference.matches)return;
     setTocVisible(panelTarget===true,true);
     for(const animation of branchAnimations.values())animation.finish();
-  });
+  },{signal:lifecycle.signal});
   rail.addEventListener('scroll',()=>{preview.hidden=true;},{passive:true});
-  window.addEventListener('scroll',()=>{preview.hidden=true;schedulePosition();},{passive:true,capture:true});
-  window.addEventListener('resize',()=>{scheduleScan();schedulePosition();},{passive:true});
-  window.addEventListener('wheel',cancelNavigation,{passive:true});
-  window.addEventListener('touchstart',cancelNavigation,{passive:true});
+  window.addEventListener('scroll',()=>{preview.hidden=true;schedulePosition();},{passive:true,capture:true,signal:lifecycle.signal});
+  window.addEventListener('resize',()=>{scheduleScan();schedulePosition();},{passive:true,signal:lifecycle.signal});
+  window.addEventListener('wheel',cancelNavigation,{passive:true,signal:lifecycle.signal});
+  window.addEventListener('touchstart',cancelNavigation,{passive:true,signal:lifecycle.signal});
   window.addEventListener('keydown',e=>{
     if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&adapter.isComposer(e.target)){draftSendAt=Date.now();explicitNavigation=false;noteDraftSend();}
     if(['PageDown','PageUp','ArrowDown','ArrowUp','Home','End'].includes(e.key))cancelNavigation();
@@ -442,15 +470,16 @@
       // TOC collapse; its previous visibility should return with the page.
       if(!nativePanel||inside){manualClosed=true;userClosed=true;temporaryOpen=false;panelTemporaryOpen=false;position();if(inside&&!opener.hidden)opener.focus({preventScroll:true});}
     }
-  },true);
+  },{capture:true,signal:lifecycle.signal});
   document.addEventListener('click',e=>{
     if(e.target.closest?.(adapter.selectors.sidebarControl))cancelImmersive();
     if(adapter.isSendButton(e.target)){draftSendAt=Date.now();explicitNavigation=false;noteDraftSend();}
     const href=e.target.closest?.('a[href]')?.href;
     if(href){const url=new URL(href,location.href);if(url.origin===location.origin&&url.pathname!==currentKey){explicitNavigation=true;cancelImmersive();}}
-  },true);
-  document.addEventListener('submit',e=>{if(e.target.matches?.('form[data-chatgpt-composer]'))noteDraftSend();},true);
-  new MutationObserver(records=>{
+  },{capture:true,signal:lifecycle.signal});
+  document.addEventListener('submit',e=>{if(e.target.matches?.('form[data-chatgpt-composer]'))noteDraftSend();},{capture:true,signal:lifecycle.signal});
+  domObserver=new MutationObserver(records=>{
+    if(!contextAlive())return;
     // A page hydration/recovery can remove nodes outside body or replace body.
     // Keep the original host and listeners, then scan the current page again.
     let needsScan=!host.isConnected, needsLayout=false;
@@ -487,14 +516,18 @@
     }
     if(needsScan)scheduleScan();
     if(needsLayout)scheduleLayout();
-  }).observe(document.documentElement,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class','style','hidden','inert','aria-hidden','role','data-d-component','data-d-has-border','data-d-tabular-nums','data-summary-panel-variant','data-chatgpt-conversation-selection-target','data-message-author-role','data-message-id','data-chatgpt-search-unit-key','data-chatgpt-search-message-ids','data-markdown-text-style','data-is-streaming','data-testid','data-thread-user-message-navigation-content']});
-  new MutationObserver(()=>{theme();scheduleLayout();}).observe(document.documentElement,{attributes:true,attributeFilter:['class','data-theme','style']});
+  });
+  domObserver.observe(document.documentElement,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class','style','hidden','inert','aria-hidden','role','data-d-component','data-d-has-border','data-d-tabular-nums','data-summary-panel-variant','data-chatgpt-conversation-selection-target','data-message-author-role','data-message-id','data-chatgpt-search-unit-key','data-chatgpt-search-message-ids','data-markdown-text-style','data-is-streaming','data-testid','data-thread-user-message-navigation-content']});
+  themeObserver=new MutationObserver(()=>{if(contextAlive()){theme();scheduleLayout();}});
+  themeObserver.observe(document.documentElement,{attributes:true,attributeFilter:['class','data-theme','style']});
   // popstate does not cover pushState from the isolated content-script world.
-  window.addEventListener('popstate',()=>{explicitNavigation=true;refresh();});
-  setInterval(()=>{if(adapter.getKey()!==currentKey) scheduleScan();},800);
-  if(globalThis.chrome?.storage) {
-    chrome.storage.local.get(defaults).then(value=>{settings={...defaults,...value};scheduleScan();}).catch(()=>{});
-    chrome.storage.onChanged.addListener((changes,area)=>{if(area!=='local')return;for(const key of Object.keys(defaults))if(changes[key])settings[key]=changes[key].newValue??defaults[key];if(!settings.immersiveMode)cancelImmersive();if(Object.keys(changes).some(key=>key.startsWith(bookmarkPrefix(currentKey))))loadBookmarks(currentKey);scheduleScan();});
+  window.addEventListener('popstate',()=>{explicitNavigation=true;refresh();},{signal:lifecycle.signal});
+  routeInterval=setInterval(()=>{if(contextAlive()&&adapter.getKey()!==currentKey)scheduleScan();},800);
+  if(hasStorage()) {
+    try {
+      chrome.storage.local.get(defaults).then(value=>{if(contextAlive()){settings={...defaults,...value};scheduleScan();}}).catch(()=>{contextAlive();});
+      chrome.storage.onChanged.addListener((changes,area)=>{if(!contextAlive()||area!=='local')return;for(const key of Object.keys(defaults))if(changes[key])settings[key]=changes[key].newValue??defaults[key];if(!settings.immersiveMode)cancelImmersive();if(Object.keys(changes).some(key=>key.startsWith(bookmarkPrefix(currentKey))))loadBookmarks(currentKey);scheduleScan();});
+    } catch(error) {if(contextAlive())throw error;}
   }
   refresh();
 })();
