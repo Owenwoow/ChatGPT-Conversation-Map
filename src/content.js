@@ -323,24 +323,32 @@
     host.style.setProperty('--dn-hover',dark?'#ffffff0e':'#00000007');
   }
   function cancelImmersive() {immersivePending=null;clearTimeout(immersiveTimer);immersiveTimer=0;}
-  function noteDraftSend() {
+  function noteConversationSend() {
     const key=adapter.getKey();
-    if(!settings.immersiveMode || !adapter.isDraftKey(key) || immersivePending)return;
-    const current=adapter.scan();
-    if(current.messages.some(message=>message.role==='user'))return;
-    immersivePending={at:Date.now(),key,savedKey:null};
+    if(!settings.immersiveMode)return;
+    if(immersivePending && Date.now()-immersivePending.at<=15000)return;
+    cancelImmersive();
+    const current=adapter.scan({draftId:pendingDraftId});
+    if(!current.main)return;
+    const known=[...current.messages,...(store.key===key?store.messages.values():[])].filter(message=>message.role==='user');
+    const orders=known.map(message=>message.order).filter(Number.isFinite);
+    immersivePending={at:Date.now(),key,draft:adapter.isDraftKey(key),savedKey:null,known:new Set(known.map(message=>message.id)),maxOrder:orders.length?Math.max(...orders):null};
   }
   function maybeCollapseSidebar(nextSnapshot, navigating) {
     const pending=immersivePending;
     if(!pending)return;
     if(!settings.immersiveMode || navigating || Date.now()-pending.at>15000){cancelImmersive();return;}
-    if(nextSnapshot.key!==pending.key && !adapter.isDraftKey(nextSnapshot.key)) {
+    if(!pending.draft && nextSnapshot.key!==pending.key){cancelImmersive();return;}
+    if(pending.draft && nextSnapshot.key!==pending.key && !adapter.isDraftKey(nextSnapshot.key)) {
       if(pending.savedKey && pending.savedKey!==nextSnapshot.key){cancelImmersive();return;}
       pending.savedKey=nextSnapshot.key;
-    } else if(nextSnapshot.key!==pending.key && pending.savedKey && nextSnapshot.key!==pending.savedKey && adapter.isDraftKey(nextSnapshot.key)) {
+    } else if(pending.draft && nextSnapshot.key!==pending.key && pending.savedKey && nextSnapshot.key!==pending.savedKey && adapter.isDraftKey(nextSnapshot.key)) {
       cancelImmersive();return;
     }
-    if(!nextSnapshot.main || !nextSnapshot.messages.some(message=>message.role==='user'))return;
+    if(!nextSnapshot.main)return;
+    const latestUser=nextSnapshot.messages.findLast(message=>message.role==='user');
+    if(!latestUser || pending.known.has(latestUser.id) || (!pending.draft && latestUser.id.startsWith('local-')) ||
+       (pending.maxOrder!==null && Number.isFinite(latestUser.order) && latestUser.order<=pending.maxOrder))return;
     const sidebar=adapter.sidebarState();
     if(!sidebar){if(!immersiveTimer)immersiveTimer=setTimeout(()=>{immersiveTimer=0;scheduleScan();},250);return;}
     cancelImmersive();
@@ -433,7 +441,7 @@
   window.addEventListener('wheel',cancelNavigation,{passive:true});
   window.addEventListener('touchstart',cancelNavigation,{passive:true});
   window.addEventListener('keydown',e=>{
-    if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&adapter.isComposer(e.target)){draftSendAt=Date.now();explicitNavigation=false;noteDraftSend();}
+    if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&adapter.isComposer(e.target)){draftSendAt=Date.now();explicitNavigation=false;noteConversationSend();}
     if(['PageDown','PageUp','ArrowDown','ArrowUp','Home','End'].includes(e.key))cancelNavigation();
     if(e.key==='Escape'){
       const inside=toc.matches(':focus-within')||shadow.activeElement===opener;
@@ -445,11 +453,11 @@
   },true);
   document.addEventListener('click',e=>{
     if(e.target.closest?.(adapter.selectors.sidebarControl))cancelImmersive();
-    if(adapter.isSendButton(e.target)){draftSendAt=Date.now();explicitNavigation=false;noteDraftSend();}
+    if(adapter.isSendButton(e.target)){draftSendAt=Date.now();explicitNavigation=false;noteConversationSend();}
     const href=e.target.closest?.('a[href]')?.href;
     if(href){const url=new URL(href,location.href);if(url.origin===location.origin&&url.pathname!==currentKey){explicitNavigation=true;cancelImmersive();}}
   },true);
-  document.addEventListener('submit',e=>{if(e.target.matches?.('form[data-chatgpt-composer]'))noteDraftSend();},true);
+  document.addEventListener('submit',e=>{if(e.target.matches?.('form[data-chatgpt-composer]'))noteConversationSend();},true);
   new MutationObserver(records=>{
     // A page hydration/recovery can remove nodes outside body or replace body.
     // Keep the original host and listeners, then scan the current page again.

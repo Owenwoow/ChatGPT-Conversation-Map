@@ -34,7 +34,14 @@ module.exports=async function immersiveScenario(page,popup) {
  await sidebar.click();await page.evaluate(()=>addTurn(1,'<h2>继续提问</h2>'));
  await expect(ticks).toHaveCount(2);await expect(sidebar).toHaveAttribute('aria-expanded','true');
  await send.click();await page.evaluate(()=>addTurn(2,'<h2>历史对话继续提问</h2>'));
- await expect(ticks).toHaveCount(3);await expect(sidebar).toHaveAttribute('aria-expanded','true');
+ await expect(ticks).toHaveCount(3);await expect(sidebar).toHaveAttribute('aria-expanded','false');await sidebar.click();
+ await page.evaluate(()=>{history.pushState({},'','/c/immersive-reading');document.querySelector('#thread').replaceChildren();addTurn(10,'<h2>阅读历史聊天</h2>');});
+ await expect(ticks).toHaveCount(1);await expect(sidebar).toHaveAttribute('aria-expanded','true');
+ await send.click();await page.waitForTimeout(400);await expect(sidebar).toHaveAttribute('aria-expanded','true');
+ await page.evaluate(()=>addTurn(2,'<h2>加载更早的历史内容</h2>'));
+ await expect(ticks).toHaveCount(2);await expect(sidebar).toHaveAttribute('aria-expanded','true');
+ await page.evaluate(()=>addTurn(11,'<h2>历史聊天的新消息</h2>'));
+ await expect(ticks).toHaveCount(3);await expect(sidebar).toHaveAttribute('aria-expanded','false');await sidebar.click();
  await draft();await send.click();await sidebar.click();await sidebar.click();await addFirst('/c/immersive-manual');
  await expect(ticks).toHaveCount(1);await expect(sidebar).toHaveAttribute('aria-expanded','true');
  await sidebar.click();await draft();await send.click();await addFirst('/c/immersive-already-closed');
@@ -57,5 +64,5 @@ module.exports=async function immersiveScenario(page,popup) {
  await page.locator('#sidebar-edge-control').click();await addFirst('/c/immersive-edge-control');
  await expect(ticks).toHaveCount(1);await expect(sidebar).toHaveAttribute('aria-expanded','true');
  await popup.locator('#immersiveMode').uncheck();
- console.log('PASS 沉浸模式开关、首次发送、手动控制、历史对话、延迟渲染与已收起侧边栏');
+ console.log('PASS 沉浸模式开关、新旧聊天发送、阅读历史、手动控制、延迟渲染与已收起侧边栏');
 };
