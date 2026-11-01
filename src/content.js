@@ -399,7 +399,7 @@
     }
     if(needsScan)scheduleScan();
     if(needsLayout)scheduleLayout();
-  }).observe(document.documentElement,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class','style','hidden','inert','aria-hidden','role','data-summary-panel-variant','data-chatgpt-conversation-selection-target','data-message-author-role','data-message-id','data-chatgpt-search-unit-key','data-chatgpt-search-message-ids','data-markdown-text-style','data-is-streaming','data-testid','data-thread-user-message-navigation-content']});
+  }).observe(document.documentElement,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class','style','hidden','inert','aria-hidden','role','data-d-component','data-d-has-border','data-d-tabular-nums','data-summary-panel-variant','data-chatgpt-conversation-selection-target','data-message-author-role','data-message-id','data-chatgpt-search-unit-key','data-chatgpt-search-message-ids','data-markdown-text-style','data-is-streaming','data-testid','data-thread-user-message-navigation-content']});
   new MutationObserver(()=>{theme();scheduleLayout();}).observe(document.documentElement,{attributes:true,attributeFilter:['class','data-theme','style']});
   // popstate does not cover pushState from the isolated content-script world.
   window.addEventListener('popstate',()=>{explicitNavigation=true;refresh();});

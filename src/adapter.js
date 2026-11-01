@@ -13,7 +13,7 @@
     userBody: '[data-user-message-bubble]',
     contentColumn: '[data-thread-user-message-navigation-content]',
     sidePanel: '[data-summary-panel-variant], aside, [role="complementary"], [role="dialog"], [data-testid*="side-panel"], [data-testid*="sidebar"]',
-    outlineExcluded: 'pre,code,[hidden],[inert],[aria-hidden="true"],[data-d-component="box"][data-d-has-border]',
+    outlineExcluded: 'pre,code,[hidden],[inert],[aria-hidden="true"],[data-d-component="box"][data-d-has-border],[data-d-component="box"] [data-d-component="title"][data-d-tabular-nums="true"]',
     stop: '[data-testid="stop-button"], button[aria-label="Stop generating"], button[aria-label="停止生成"], button[aria-label="停止流式传输"]',
     streaming: '[data-is-streaming="true"], .result-streaming'
   });

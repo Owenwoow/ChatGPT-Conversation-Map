@@ -326,11 +326,15 @@ const assert=require('node:assert/strict');
  for(const script of ['adapter','model','content'])await outlinePage.addScriptTag({path:path.join(__dirname,`../src/${script}.js`)});
  const outlineRoot=outlinePage.locator('#dual-navigator-host'), outlineToc=outlineRoot.locator('.toc');
  await outlinePage.evaluate(()=>{
-   document.querySelector('[data-message-id="a0"] .markdown').innerHTML='<h2>正文场景</h2><p>外层章节说明</p><div data-d-component="box" data-d-has-border><h2>场景</h2><div data-d-component="box" data-d-has-border><h3>卡片内嵌套标题</h3></div><p style="height:800px">卡片正文</p></div><div data-d-component="box"><h3>无边框布局中的正文标题</h3></div><div data-testid="chatgpt-writing-block"><h3>文档中的正文标题</h3></div><pre><h2>代码中的标题</h2></pre><div hidden><h2>隐藏标题</h2></div>';
+   document.querySelector('[data-message-id="a0"] .markdown').innerHTML='<h2>正文场景</h2><p>外层章节说明</p><div data-d-component="box"><div data-d-component="row"><div data-d-component="box"><h1 data-d-component="title" data-d-tabular-nums="true">3,985.50</h1></div></div><div data-d-component="grid"><div data-d-component="box"><h2 data-d-component="title" data-d-tabular-nums="true">12.86倍</h2></div></div></div><div data-d-component="box" data-d-has-border><h2>场景</h2><div data-d-component="box" data-d-has-border><h3>卡片内嵌套标题</h3></div><p style="height:800px">卡片正文</p></div><div data-d-component="box"><h3>无边框布局中的正文标题</h3><h3>3,985.50</h3></div><div data-testid="chatgpt-writing-block"><h3>文档中的正文标题</h3></div><pre><h2>代码中的标题</h2></pre><div hidden><h2>隐藏标题</h2></div>';
  });
- const expectedOutline=['正文场景','无边框布局中的正文标题','文档中的正文标题'];
+ const expectedOutline=['正文场景','无边框布局中的正文标题','3,985.50','文档中的正文标题'];
  await expect(outlineRoot.locator('.heading')).toHaveText(expectedOutline);
  assert.deepEqual(await outlinePage.evaluate(()=>DualNav.adapter.scan().messages.find(m=>m.id==='a0').headings.map(h=>h.text)),expectedOutline);
+ await outlinePage.evaluate(()=>document.querySelector('[data-message-id="a0"] [data-d-tabular-nums]').removeAttribute('data-d-tabular-nums'));
+ await expect(outlineRoot.locator('.heading')).toHaveText(['正文场景','3,985.50','无边框布局中的正文标题','3,985.50','文档中的正文标题']);
+ await outlinePage.evaluate(()=>document.querySelector('[data-message-id="a0"] h1').setAttribute('data-d-tabular-nums','true'));
+ await expect(outlineRoot.locator('.heading')).toHaveText(expectedOutline);
  await outlinePage.evaluate(()=>document.querySelector('[data-d-component="box"][data-d-has-border] h2').scrollIntoView());
  await expect(outlineRoot.locator('.row.active .heading')).toHaveText('正文场景');
  await outlinePage.evaluate(()=>{document.querySelector('[data-message-id="a0"] .markdown').innerHTML='<div data-d-component="box" data-d-has-border><h2>只有卡片标题</h2></div>';window.scrollTo(0,0);});
