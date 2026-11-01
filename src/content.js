@@ -219,7 +219,7 @@
     const root=scrollRoot||document.scrollingElement;
     rail.hidden=!settings.leftEnabled || turns.length<2 || root.scrollHeight<=root.clientHeight+80 || leftSpace<70;
     if(rail.hidden)preview.hidden=true;
-    rail.style.left=`${leftEdge+40}px`;rail.style.top=`${Math.max(100,innerHeight*.2)}px`;
+    rail.style.left=`${leftEdge+40}px`;rail.style.top='50%';rail.style.transform='translateY(-50%)';
     rail.style.gap=turns.length>60?'1px':'3px';
     for(const tick of rail.children)tick.style.height=turns.length>60?'8px':'13px';
     if(rail.hidden)lastRailActive=null;

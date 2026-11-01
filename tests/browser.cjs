@@ -16,6 +16,7 @@ const assert=require('node:assert/strict');
  await expect(root.locator('.star-toggle,.stars-filter')).toHaveCount(0);
  await page.evaluate(()=>{document.querySelector('.sidebar').hidden=true;document.querySelector('main').style.marginLeft='0';});
  await expect.poll(()=>root.locator('.rail').evaluate(el=>el.getBoundingClientRect().left)).toBe(40);
+ await expect.poll(()=>root.locator('.rail').evaluate(el=>Math.round(el.getBoundingClientRect().top+el.getBoundingClientRect().height/2))).toBe(500);
  await page.evaluate(()=>{document.querySelector('.sidebar').hidden=false;document.querySelector('main').style.marginLeft='';});
  await expect.poll(()=>root.locator('.rail').evaluate(el=>el.getBoundingClientRect().left)).toBe(280);
  console.log('PASS 左侧保留原版刻度功能、无收藏控件、原生侧栏开关后保留40px页边距');
