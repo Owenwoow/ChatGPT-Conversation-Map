@@ -34,7 +34,23 @@ module.exports=async function immersiveScenario(page,popup) {
  await sidebar.click();await page.evaluate(()=>addTurn(1,'<h2>继续提问</h2>'));
  await expect(ticks).toHaveCount(2);await expect(sidebar).toHaveAttribute('aria-expanded','true');
  await send.click();await page.evaluate(()=>addTurn(2,'<h2>历史对话继续提问</h2>'));
- await expect(ticks).toHaveCount(3);await expect(sidebar).toHaveAttribute('aria-expanded','true');
+ await expect(ticks).toHaveCount(3);await expect(sidebar).toHaveAttribute('aria-expanded','false');
+ // Existing messages and answer mutations cannot confirm another successful send.
+ await sidebar.click();await send.click();
+ await page.evaluate(()=>document.querySelector('#thread .markdown').insertAdjacentHTML('beforeend','<p>旧回答继续渲染</p>'));
+ await page.waitForTimeout(500);await expect(sidebar).toHaveAttribute('aria-expanded','true');
+ await page.evaluate(()=>{
+   const thread=document.querySelector('#thread');thread.innerHTML=thread.innerHTML;
+ });
+ await page.waitForTimeout(500);await expect(sidebar).toHaveAttribute('aria-expanded','true');
+ await page.evaluate(()=>addTurn(3,'<h2>确认新增用户消息后收起</h2>'));
+ await expect(sidebar).toHaveAttribute('aria-expanded','false');
+ // Repeated keyboard sends after manually reopening must also collapse.
+ await sidebar.click();await composer.press('Enter');
+ await page.waitForTimeout(400);await expect(sidebar).toHaveAttribute('aria-expanded','true');
+ await page.evaluate(()=>addTurn(4,'<h2>已有对话回车发送</h2>'));
+ await expect(ticks).toHaveCount(5);await expect(sidebar).toHaveAttribute('aria-expanded','false');
+ await sidebar.click();
  await draft();await send.click();await sidebar.click();await sidebar.click();await addFirst('/c/immersive-manual');
  await expect(ticks).toHaveCount(1);await expect(sidebar).toHaveAttribute('aria-expanded','true');
  await sidebar.click();await draft();await send.click();await addFirst('/c/immersive-already-closed');
@@ -64,6 +80,22 @@ module.exports=async function immersiveScenario(page,popup) {
    history.pushState({},'','/c/immersive-live-structure');
  });
  await expect(ticks).toHaveCount(1);await expect(sidebar).toHaveAttribute('aria-expanded','false');
+ await sidebar.click();await send.click();await page.waitForTimeout(400);
+ await expect(sidebar).toHaveAttribute('aria-expanded','true');
+ await page.evaluate(()=>{
+   const next=document.createElement('div');
+   next.innerHTML='<div data-chatgpt-search-unit-key="fallback-turn-1:0:user" data-chatgpt-search-message-ids="live-user-2"><div data-user-message-bubble>已保存但保留临时标识的追问</div></div>';
+   document.querySelector('#thread').append(next);
+ });
+ await expect(sidebar).toHaveAttribute('aria-expanded','false');
+ // A different route is navigation even without a link or popstate event.
+ await sidebar.click();await send.click();
+ await page.evaluate(()=>{
+   history.pushState({},'','/c/immersive-route-switch');
+   const thread=document.querySelector('#thread');thread.dataset.chatgptConversationSelectionTarget='immersive-route-switch';
+   thread.replaceChildren();addTurn(0,'<h2>切换的历史会话</h2>');
+ });
+ await expect(ticks).toHaveCount(1);await expect(sidebar).toHaveAttribute('aria-expanded','true');
  await popup.locator('#immersiveMode').uncheck();
- console.log('PASS 沉浸模式开关、首次发送、手动控制、历史对话、延迟渲染与已收起侧边栏');
+ console.log('PASS 沉浸模式每次发送、新聊天、历史追问、消息确认、手动控制、路由切换与临时标识');
 };

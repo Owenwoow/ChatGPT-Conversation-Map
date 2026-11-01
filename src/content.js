@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   if (document.getElementById('dual-navigator-host')) return;
-  const build = '2026-10-31.3';
+  const build = '2026-11-02.1';
   console.info(`[Dual Navigator] starting build ${build}`);
   const {adapter, ConversationStore, buildTree} = globalThis.DualNav;
   const store = new ConversationStore();
@@ -349,24 +349,34 @@
     host.style.setProperty('--dn-hover',dark?'#ffffff0e':'#00000007');
   }
   function cancelImmersive() {immersivePending=null;clearTimeout(immersiveTimer);immersiveTimer=0;}
-  function noteDraftSend() {
+  function noteSend() {
     const key=adapter.getKey();
-    if(!settings.immersiveMode || !adapter.isDraftKey(key) || immersivePending)return;
-    const current=adapter.scan();
-    if(current.messages.some(message=>message.role==='user'))return;
-    immersivePending={at:Date.now(),key,savedKey:null};
+    if(!settings.immersiveMode)return;
+    if(immersivePending && Date.now()-immersivePending.at>15000)cancelImmersive();
+    // A click may also submit the form. Keep the baseline from before either event.
+    if(immersivePending)return;
+    const current=adapter.scan({draftId:pendingDraftId,allowDraft:adapter.isDraftKey(key)});
+    if(!current.main)return;
+    const users=current.messages.filter(message=>message.role==='user');
+    if(currentKey===key)users.push(...turns.map(turn=>turn.user).filter(Boolean));
+    immersivePending={at:Date.now(),key,draft:adapter.isDraftKey(key),savedKey:null,
+      ids:new Set(users.map(message=>message.id)),
+      slots:new Set(users.map(message=>message.slotId).filter(Boolean)),
+      elements:new WeakSet(users.map(message=>message.element).filter(Boolean))};
   }
   function maybeCollapseSidebar(nextSnapshot, navigating) {
     const pending=immersivePending;
     if(!pending)return;
     if(!settings.immersiveMode || navigating || Date.now()-pending.at>15000){cancelImmersive();return;}
+    if(!pending.draft && nextSnapshot.key!==pending.key){cancelImmersive();return;}
     if(nextSnapshot.key!==pending.key && !adapter.isDraftKey(nextSnapshot.key)) {
       if(pending.savedKey && pending.savedKey!==nextSnapshot.key){cancelImmersive();return;}
       pending.savedKey=nextSnapshot.key;
     } else if(nextSnapshot.key!==pending.key && pending.savedKey && nextSnapshot.key!==pending.savedKey && adapter.isDraftKey(nextSnapshot.key)) {
       cancelImmersive();return;
     }
-    if(!nextSnapshot.main || !nextSnapshot.messages.some(message=>message.role==='user'))return;
+    if(!nextSnapshot.main || !nextSnapshot.messages.some(message=>message.role==='user' &&
+        !pending.ids.has(message.id) && !pending.slots.has(message.slotId) && !pending.elements.has(message.element)))return;
     const sidebar=adapter.sidebarState();
     if(!sidebar){if(!immersiveTimer)immersiveTimer=setTimeout(()=>{immersiveTimer=0;scheduleScan();},250);return;}
     cancelImmersive();
@@ -461,7 +471,7 @@
   window.addEventListener('wheel',cancelNavigation,{passive:true,signal:lifecycle.signal});
   window.addEventListener('touchstart',cancelNavigation,{passive:true,signal:lifecycle.signal});
   window.addEventListener('keydown',e=>{
-    if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&adapter.isComposer(e.target)){draftSendAt=Date.now();explicitNavigation=false;noteDraftSend();}
+    if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&adapter.isComposer(e.target)){draftSendAt=Date.now();explicitNavigation=false;noteSend();}
     if(['PageDown','PageUp','ArrowDown','ArrowUp','Home','End'].includes(e.key))cancelNavigation();
     if(e.key==='Escape'){
       const inside=toc.matches(':focus-within')||shadow.activeElement===opener;
@@ -473,11 +483,11 @@
   },{capture:true,signal:lifecycle.signal});
   document.addEventListener('click',e=>{
     if(e.target.closest?.(adapter.selectors.sidebarControl))cancelImmersive();
-    if(adapter.isSendButton(e.target)){draftSendAt=Date.now();explicitNavigation=false;noteDraftSend();}
+    if(adapter.isSendButton(e.target)){draftSendAt=Date.now();explicitNavigation=false;noteSend();}
     const href=e.target.closest?.('a[href]')?.href;
     if(href){const url=new URL(href,location.href);if(url.origin===location.origin&&url.pathname!==currentKey){explicitNavigation=true;cancelImmersive();}}
   },{capture:true,signal:lifecycle.signal});
-  document.addEventListener('submit',e=>{if(e.target.matches?.('form[data-chatgpt-composer]'))noteDraftSend();},{capture:true,signal:lifecycle.signal});
+  document.addEventListener('submit',e=>{if(e.target.matches?.('form[data-chatgpt-composer]')){draftSendAt=Date.now();explicitNavigation=false;noteSend();}},{capture:true,signal:lifecycle.signal});
   domObserver=new MutationObserver(records=>{
     if(!contextAlive())return;
     // A page hydration/recovery can remove nodes outside body or replace body.
