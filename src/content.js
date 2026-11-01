@@ -5,7 +5,7 @@
   console.info(`[Dual Navigator] starting build ${build}`);
   const {adapter, ConversationStore, buildTree} = globalThis.DualNav;
   const store = new ConversationStore();
-  const defaults = {leftEnabled:true,rightEnabled:true,autoExpand:true,autoCollapse:false};
+  const defaults = {leftEnabled:true,rightEnabled:true,autoExpand:true,autoCollapse:false,outlineWidth:'auto'};
   let settings = {...defaults}, snapshot, turns = [], active = null, activeHeading = null;
   let currentKey = '', manualClosed = false, userClosed = false, compact = false, hovering = false, temporaryOpen = false;
   let wasStreaming = false, treeSignature = null, railSignature = null, frame = 0, timer = 0;
@@ -235,7 +235,8 @@
     const sideRoom=Math.max(0,rightSpace-rightInset-12);
     compact=sideRoom<240;
     const panelLimit=Math.max(0,rightEdge-leftEdge-rightInset-12);
-    const panelWidth=Math.min(preferredPanelWidth,panelLimit,compact?panelLimit:sideRoom);
+    const selectedWidth={'narrow':240,'medium':320,'wide':400}[settings.outlineWidth] || preferredPanelWidth;
+    const panelWidth=Math.min(selectedWidth,panelLimit,compact?panelLimit:sideRoom);
     toc.style.width=`${panelWidth}px`;
     toc.classList.toggle('overlay',compact);
     const hasHeadings=settings.rightEnabled && headings(active).length>0;
