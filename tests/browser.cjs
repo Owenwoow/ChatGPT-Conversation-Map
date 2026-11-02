@@ -31,6 +31,22 @@ const assert=require('node:assert/strict');
  await root.locator('.heading').first().focus();await root.locator('.heading').first().press('Enter');
  await expect(root.locator('.heading').first()).toBeFocused();
  console.log('PASS 轮次预览、左右联动、章节高亮和树折叠');
+ // The bulk control affects every top-level branch while preserving nested choices.
+ await page.evaluate(()=>{const body=document.querySelector('[data-message-id="a2"] .markdown');window.outlineTestOriginal=body.innerHTML;body.innerHTML='<h2>第一部分</h2><h3>第一子项</h3><h4>更深层</h4><h2>第二部分</h2><h3>第二子项</h3>';});
+ await expect(root.locator('.heading')).toHaveCount(5);
+ const bulk=root.locator('.fold-all'), topToggles=root.locator('.tree > .branch > .row > .disclosure');
+ await expect(topToggles).toHaveCount(2);await expect(bulk).toHaveText('收起全部');
+ await root.locator('.tree > .branch').first().locator('.children .disclosure').first().click();
+ await bulk.click();await expect(bulk).toHaveText('展开全部');
+ await expect(topToggles.nth(0)).toHaveAttribute('aria-expanded','false');await expect(topToggles.nth(1)).toHaveAttribute('aria-expanded','false');
+ await page.evaluate(()=>document.querySelector('[data-message-id="a2"] .markdown').insertAdjacentHTML('beforeend','<h3>生成的新子项</h3>'));
+ await expect(root.locator('.heading')).toHaveCount(6);await expect(bulk).toHaveText('展开全部');
+ await bulk.click();await expect(bulk).toHaveText('收起全部');await expect(topToggles.nth(0)).toHaveAttribute('aria-expanded','true');await expect(topToggles.nth(1)).toHaveAttribute('aria-expanded','true');
+ await expect(root.locator('.tree > .branch').first().locator('.children .disclosure').first()).toHaveAttribute('aria-expanded','false');
+ await topToggles.nth(0).click();await topToggles.nth(1).click();await expect(bulk).toHaveText('展开全部');
+ await page.evaluate(()=>document.querySelector('[data-message-id="a2"] .markdown').innerHTML=window.outlineTestOriginal);
+ await expect(root.locator('.heading')).toHaveCount(7);
+ console.log('PASS 第一层子目录批量收起、展开与流式更新');
  // Scroll without a click updates the current turn after the navigation lock expires/cancels.
  await page.mouse.wheel(0,1);await page.evaluate(()=>document.querySelector('[data-message-id="u5"]').scrollIntoView());
  await expect(root.locator('.tick.active')).toHaveAttribute('data-id','u5');
