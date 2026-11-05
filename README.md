@@ -6,6 +6,7 @@
     <a href="https://github.com/Owenwoow/ChatGPT-Conversation-Map/releases"><img src="https://img.shields.io/github/downloads/Owenwoow/ChatGPT-Conversation-Map/total?label=downloads&amp;color=555" alt="发行包总下载量"></a>
     <a href="https://github.com/Owenwoow/ChatGPT-Conversation-Map/actions/workflows/ci-release.yml"><img src="https://img.shields.io/github/actions/workflow/status/Owenwoow/ChatGPT-Conversation-Map/ci-release.yml?branch=main&amp;label=checks" alt="自动化检查的实际状态"></a>
     <a href="manifest.json"><img src="https://img.shields.io/badge/Manifest-V3-555" alt="Manifest V3"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-555" alt="MIT 许可证"></a>
   </p>
   <p><strong>长对话，也能轻松找到方向。</strong></p>
   <p>左侧回到某轮提问，右侧直达回答章节。把滚动查找变成有迹可循的阅读。</p>
@@ -127,4 +128,8 @@ npx playwright install chromium
 | [`popup/`](popup/) | 设置界面与语言适配。 |
 | [`tests/`](tests/) | 单元测试、模拟页面及扩展测试。 |
 
-发行 ZIP 仅包含运行必需的文件。`release/`、测试产物和依赖目录不纳入版本控制。
+发行 ZIP 包含运行必需的文件及 `LICENSE`。`release/`、测试产物和依赖目录不纳入版本控制。
+
+## 许可证
+
+本项目采用 [MIT 许可证](LICENSE)。允许使用、修改、分发和商业使用，分发副本或主要代码时须保留版权声明和许可声明。软件按原样提供，不附带任何担保。

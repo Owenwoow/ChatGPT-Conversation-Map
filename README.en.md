@@ -6,6 +6,7 @@
     <a href="https://github.com/Owenwoow/ChatGPT-Conversation-Map/releases"><img src="https://img.shields.io/github/downloads/Owenwoow/ChatGPT-Conversation-Map/total?label=downloads&amp;color=555" alt="Total release downloads"></a>
     <a href="https://github.com/Owenwoow/ChatGPT-Conversation-Map/actions/workflows/ci-release.yml"><img src="https://img.shields.io/github/actions/workflow/status/Owenwoow/ChatGPT-Conversation-Map/ci-release.yml?branch=main&amp;label=checks" alt="Actual automated check status"></a>
     <a href="manifest.json"><img src="https://img.shields.io/badge/Manifest-V3-555" alt="Manifest V3"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-555" alt="MIT License"></a>
   </p>
   <p><strong>Find your way through long conversations.</strong></p>
   <p>Return to a question on the left. Jump to a section on the right. Spend less time scrolling.</p>
@@ -127,4 +128,8 @@ For development, use a separate Chrome profile and load the repository root. Aft
 | [`popup/`](popup/) | Settings interface and language adaptation. |
 | [`tests/`](tests/) | Unit tests, fixtures, and extension tests. |
 
-Release ZIPs include only files required to run the extension. `release/`, test output, and dependency directories are excluded from version control.
+Release ZIPs include the files required to run the extension and `LICENSE`. `release/`, test output, and dependency directories are excluded from version control.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE). Use, modification, distribution, and commercial use are permitted. Copies or substantial portions of the software must retain the copyright and license notices. The software is provided as is, without warranty.
