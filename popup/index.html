@@ -1,11 +1,83 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="style.css"><title>ChatGPT 对话地图</title></head>
-<body><header><span class="mark">≡</span><div><strong>ChatGPT 对话地图</strong><p>长对话，也能轻松找到方向</p></div></header>
-<main>
-<label><span>对话小地图<small>在页面左侧定位历史提问</small></span><input type="checkbox" id="leftEnabled" role="switch"></label>
-<label><span>回答目录<small>在页面右侧浏览章节结构</small></span><input type="checkbox" id="rightEnabled" role="switch"></label>
-<label for="outlineWidth"><span>目录宽度<small>空间不足时自动收窄</small></span><select id="outlineWidth"><option value="auto">自动</option><option value="narrow">窄（240 像素）</option><option value="medium">中（320 像素）</option><option value="wide">宽（400 像素）</option></select></label>
-<label><span>生成时自动展开<small>跟随新回答的标题更新</small></span><input type="checkbox" id="autoExpand" role="switch"></label>
-<label><span>自动收起<small>自动展开的目录离开后收起；手动展开则保持</small></span><input type="checkbox" id="autoCollapse" role="switch"></label>
-<label><span>沉浸模式<small>每次发送消息后自动收起网页侧边栏</small></span><input type="checkbox" id="immersiveMode" role="switch"></label>
-</main><footer>仅本地处理 · 不上传聊天内容<p id="status" role="status">设置自动保存，即时生效</p></footer><script src="settings.js"></script></body></html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="style.css">
+  <title>ChatGPT Conversation Map</title>
+</head>
+<body>
+  <header class="header">
+    <img class="brand-icon" src="../icons/icon48.png" width="40" height="40" alt="">
+    <div class="brand">
+      <p class="eyebrow">ChatGPT</p>
+      <h1 data-i18n="appName">Conversation Map</h1>
+      <p class="tagline" data-i18n="tagline">Find your way through long conversations.</p>
+    </div>
+  </header>
+
+  <main>
+    <section aria-labelledby="navigationTitle">
+      <h2 id="navigationTitle" data-i18n="navigationTitle">Navigation</h2>
+      <div class="card">
+        <label class="setting" for="leftEnabled">
+          <span class="setting-copy"><span id="leftLabel" class="setting-title" data-i18n="leftLabel">Conversation map</span><small id="leftHint" data-i18n="leftHint">Jump between turns on the left.</small></span>
+          <input type="checkbox" id="leftEnabled" role="switch" aria-labelledby="leftLabel" aria-describedby="leftHint" disabled>
+        </label>
+        <label class="setting" for="rightEnabled">
+          <span class="setting-copy"><span id="rightLabel" class="setting-title" data-i18n="rightLabel">Response outline</span><small id="rightHint" data-i18n="rightHint">Browse response headings on the right.</small></span>
+          <input type="checkbox" id="rightEnabled" role="switch" aria-labelledby="rightLabel" aria-describedby="rightHint" disabled>
+        </label>
+        <label class="setting width-setting" for="outlineWidth">
+          <span class="setting-copy"><span id="widthLabel" class="setting-title" data-i18n="widthLabel">Outline width</span><small id="widthHint" data-i18n="widthHint">Adapts to the available space.</small></span>
+          <select id="outlineWidth" aria-labelledby="widthLabel" aria-describedby="widthHint" disabled>
+            <option value="auto" data-i18n="widthAuto">Auto</option>
+            <option value="narrow" data-i18n="widthNarrow">Narrow · 240 px</option>
+            <option value="medium" data-i18n="widthMedium">Medium · 320 px</option>
+            <option value="wide" data-i18n="widthWide">Wide · 400 px</option>
+          </select>
+        </label>
+      </div>
+    </section>
+
+    <section aria-labelledby="behaviorTitle">
+      <h2 id="behaviorTitle" data-i18n="behaviorTitle">Outline behavior</h2>
+      <div class="card">
+        <label class="setting" for="autoExpand">
+          <span class="setting-copy"><span id="expandLabel" class="setting-title" data-i18n="expandLabel">Auto-expand while generating</span><small id="expandHint" data-i18n="expandHint">Show the outline as new headings appear.</small></span>
+          <input type="checkbox" id="autoExpand" role="switch" aria-labelledby="expandLabel" aria-describedby="expandHint" disabled>
+        </label>
+        <label class="setting" for="autoCollapse">
+          <span class="setting-copy"><span id="collapseLabel" class="setting-title" data-i18n="collapseLabel">Auto-collapse</span><small id="collapseHint" data-i18n="collapseHint">Collapse when you leave. Manually opened outlines stay open.</small></span>
+          <input type="checkbox" id="autoCollapse" role="switch" aria-labelledby="collapseLabel" aria-describedby="collapseHint" disabled>
+        </label>
+      </div>
+    </section>
+
+    <section aria-labelledby="focusTitle">
+      <h2 id="focusTitle" data-i18n="focusTitle">Focused reading</h2>
+      <div class="card">
+        <label class="setting" for="immersiveMode">
+          <span class="setting-copy"><span id="immersiveLabel" class="setting-title" data-i18n="immersiveLabel">Immersive mode</span><small id="immersiveHint" data-i18n="immersiveHint">Hide the ChatGPT sidebar after you send a message.</small></span>
+          <input type="checkbox" id="immersiveMode" role="switch" aria-labelledby="immersiveLabel" aria-describedby="immersiveHint" disabled>
+        </label>
+      </div>
+    </section>
+
+    <section aria-labelledby="toolsTitle">
+      <h2 id="toolsTitle" data-i18n="toolsTitle">Content tools</h2>
+      <div class="card">
+        <label class="setting" for="blockCopyEnabled">
+          <span class="setting-copy"><span id="blockCopyLabel" class="setting-title" data-i18n="blockCopyLabel">Copy content blocks</span><small id="blockCopyHint" data-i18n="blockCopyHint">Show a copy button on static diagrams and cards.</small></span>
+          <input type="checkbox" id="blockCopyEnabled" role="switch" aria-labelledby="blockCopyLabel" aria-describedby="blockCopyHint" disabled>
+        </label>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p id="status" role="status" aria-live="polite" aria-atomic="true" data-state="loading" data-i18n="loading">Loading settings…</p>
+  </footer>
+  <script src="settings.js"></script>
+</body>
+</html>

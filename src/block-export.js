@@ -28,6 +28,8 @@
   let current = null, route = adapter.getKey(), frame = 0, hideTimer = 0, feedbackTimer = 0, disposed = false, keyboardFocus = false, copying = false;
   let extensionRuntime = false;
   try {extensionRuntime = !!globalThis.chrome?.runtime?.id;} catch {}
+  let enabled = true, settingsRevision = 0;
+  let storageChanges = null;
   const resizeObserver = new ResizeObserver(schedulePosition);
 
   function alive() {
@@ -35,6 +37,7 @@
     if (!extensionRuntime) return true;
     try {if (globalThis.chrome?.runtime?.id) return true;} catch {}
     disposed = true; lifecycle.abort(); resizeObserver.disconnect(); clearInterval(routeTimer);
+    try {storageChanges?.removeListener(onSettingsChanged);} catch {}
     clearTimeout(hideTimer); clearTimeout(feedbackTimer); cancelAnimationFrame(frame); host.remove();
     return false;
   }
@@ -44,6 +47,15 @@
   function hide() {
     clearTimeout(hideTimer); clearTimeout(feedbackTimer); resizeObserver.disconnect();
     current = null; host.hidden = true; resetFeedback();
+  }
+  function setEnabled(value) {
+    enabled = value !== false;
+    if (!enabled) hide();
+  }
+  function onSettingsChanged(changes, area) {
+    if (area !== 'local' || !changes.blockCopyEnabled || !alive()) return;
+    settingsRevision++;
+    setEnabled(changes.blockCopyEnabled.newValue);
   }
   function scheduleHide() {
     clearTimeout(hideTimer);
@@ -78,6 +90,7 @@
     return candidate;
   }
   function show(block) {
+    if (!enabled) return;
     if (block === current) {clearTimeout(hideTimer); return;}
     // Reuse the adapter's route/preview filtering, only when entering a new block.
     const snapshot = adapter.scan();
@@ -165,7 +178,7 @@
     feedbackTimer = setTimeout(resetFeedback,1400);
   }
   function validTarget() {
-    if (!alive() || !current?.isConnected || route !== adapter.getKey() || current.closest(hidden)) {hide(); return null;}
+    if (!alive() || !enabled || !current?.isConnected || route !== adapter.getKey() || current.closest(hidden)) {hide(); return null;}
     return current;
   }
   async function writeClipboard(text) {
@@ -204,7 +217,8 @@
     finally {copying = false; copy.removeAttribute('aria-busy');}
   },options);
   document.addEventListener('pointerover',event => {
-    if (!alive() || event.composedPath().includes(host)) {clearTimeout(hideTimer); return;}
+    if (!alive() || !enabled) return;
+    if (event.composedPath().includes(host)) {clearTimeout(hideTimer); return;}
     if (keyboardFocus && shadow.activeElement) return;
     const block = findBlock(event.target);
     if (block) show(block); else scheduleHide();
@@ -224,4 +238,16 @@
   document.addEventListener('scroll',schedulePosition,{...options,capture:true,passive:true});
   window.addEventListener('resize',schedulePosition,options);
   const routeTimer = setInterval(() => {if (alive() && current && (!current.isConnected || adapter.getKey() !== route)) hide();},500);
+  try {
+    const storage = globalThis.chrome?.storage;
+    if (storage?.local) {
+      enabled = false;
+      storageChanges = storage.onChanged;
+      storageChanges.addListener(onSettingsChanged);
+      const revision = settingsRevision;
+      storage.local.get({blockCopyEnabled:true}).then(settings => {
+        if (alive() && settingsRevision === revision) setEnabled(settings.blockCopyEnabled);
+      }).catch(() => {alive();});
+    }
+  } catch {if (alive()) setEnabled(false);}
 })();

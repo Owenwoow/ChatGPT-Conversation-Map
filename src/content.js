@@ -8,9 +8,9 @@
   const defaults = {leftEnabled:true,rightEnabled:true,autoExpand:true,autoCollapse:false,outlineWidth:'auto',immersiveMode:false};
   let settings = {...defaults}, snapshot, turns = [], active = null, activeHeading = null;
   let currentKey = '', manualClosed = false, userClosed = false, compact = false, hovering = false, temporaryOpen = false;
-  let wasStreaming = false, treeSignature = null, railSignature = null, frame = 0, timer = 0;
+  let wasStreaming = false, treeSignature = null, treeTurnId = null, railSignature = null, frame = 0, timer = 0;
   let navigation = 0, targetLock = null, scrollRoot = null, closeTimer = 0;
-  let lastRailActive = null, seenRouteMessages = new Map(), routeExclusions = new WeakMap();
+  let lastRailActive = null, railNeedsReveal = false, seenRouteMessages = new Map(), routeExclusions = new WeakMap();
   let draftSendAt = 0, explicitNavigation = false;
   let immersivePending = null, immersiveTimer = 0;
   let pendingDraftId = null;
@@ -24,6 +24,7 @@
   let panelTarget = null, panelAnimation = null, branchNumber = 0;
   let preferredPanelWidth = 280;
   let bookmarks = new Set(), bookmarkRoute = '', bookmarkLoading = false, bookmarkVersion = 0;
+  const bookmarkWrites = new Set();
   let previewTurnId = null, previewTick = null, previewHideTimer = 0;
   const lifecycle = new AbortController();
   let domObserver = null, themeObserver = null, routeInterval = 0, disposed = false;
@@ -37,7 +38,7 @@
   shadow.innerHTML = `<style>
     :host{all:initial;position:fixed;inset:0;z-index:40;pointer-events:none;font:12px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--dn-text,#666);--dn-bg:#fff;--dn-text:#777;--dn-strong:#222;--dn-line:#dedede;--dn-hover:#f1f1f1;--dn-shadow:0 5px 24px #0000000d}
     *{box-sizing:border-box}button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;padding:0}button:focus-visible{outline:2px solid var(--dn-text);outline-offset:3px}button:hover{color:var(--dn-strong)}[hidden]{display:none!important}
-    .rail{position:fixed;width:30px;max-height:66vh;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;pointer-events:auto;padding:8px 2px;display:flex;flex-direction:column;gap:3px;align-items:center;border-radius:10px}.rail::-webkit-scrollbar{display:none}.tick{height:13px;min-height:7px;width:26px;display:flex;align-items:center;justify-content:flex-start;border-radius:3px;flex-shrink:0}.tick:after{content:"";height:2px;width:9px;background:var(--dn-text);opacity:.37;border-radius:2px;transition:width .16s,opacity .16s}.tick:nth-child(5n):after{width:15px}.tick:hover:after{width:21px;opacity:.8}.tick.active:after{width:23px;opacity:1;background:var(--dn-strong)}
+    .rail{position:fixed;width:30px;max-height:66vh;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:none;pointer-events:auto;padding:8px 2px;display:flex;flex-direction:column;gap:3px;align-items:center;border-radius:10px}.rail::-webkit-scrollbar{display:none}.tick{height:13px;min-height:7px;width:26px;display:flex;align-items:center;justify-content:flex-start;border-radius:3px;flex-shrink:0}.tick:after{content:"";height:2px;width:9px;background:var(--dn-text);opacity:.37;border-radius:2px;transition:width .16s,opacity .16s}.tick:nth-child(5n):after{width:15px}.tick:hover:after{width:21px;opacity:.8}.tick.active:after{width:23px;opacity:1;background:var(--dn-strong)}
     .preview{pointer-events:auto;position:fixed;width:330px;padding:14px 16px;border:1px solid var(--dn-line);border-radius:16px;background:var(--dn-bg);box-shadow:var(--dn-shadow)}.eyebrow{font-size:10px;letter-spacing:.04em;color:var(--dn-text);margin-bottom:7px}.question{font-size:13px;font-weight:600;color:var(--dn-strong);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.answer{margin:7px 0 0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;color:var(--dn-text);line-height:1.7}
     .tick{position:relative}.tick.marked:after{width:21px;opacity:1;background:var(--dn-bookmark)}.tick.marked.active:after{width:23px;background:var(--dn-strong)}.tick.marked.active:before{content:"";position:absolute;right:0;width:3px;height:3px;border-radius:50%;background:var(--dn-bookmark)}.preview .question{padding-right:25px}.bookmark-toggle{position:absolute;right:11px;top:11px;width:26px;height:26px;border-radius:6px;display:grid;place-items:center}.bookmark-toggle:hover{background:var(--dn-hover)}.bookmark-toggle svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linejoin:round}.bookmark-toggle[aria-pressed=true] svg{fill:var(--dn-strong);stroke:var(--dn-strong)}.bookmark-toggle:disabled{opacity:.35;cursor:default}
     .toc{position:fixed;width:280px;pointer-events:auto;max-height:calc(100vh - 180px);display:flex;flex-direction:column;transform-origin:top right}.toc[data-state=opening],.toc[data-state=closing]{will-change:opacity,transform}.toc[data-state=closing]{pointer-events:none}.toc.overlay{padding:8px;border:1px solid var(--dn-line);border-radius:12px;background:var(--dn-bg);box-shadow:var(--dn-shadow)}.toc-head{display:flex;justify-content:flex-end;margin-bottom:2px;padding:0 3px}.icon{width:26px;height:26px;border-radius:6px;font-size:18px}.icon:hover{background:var(--dn-hover);color:var(--dn-strong)}.tree{overflow:auto;scrollbar-width:thin;scrollbar-color:var(--dn-line) transparent;overscroll-behavior:contain;padding:3px 3px 10px;min-height:0}.branch{position:relative}.children{margin-left:10px;padding-left:6px;border-left:1px solid var(--dn-line);overflow:hidden}.row{display:flex;align-items:flex-start;margin:2px 0;min-height:29px}.row:hover>.heading,.row.active>.heading{background:var(--dn-hover)}.row.active>.heading{color:var(--dn-strong)}.heading{padding:6px 8px;text-align:left;line-height:1.55;flex:1;min-width:0;border-radius:6px;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.heading:focus-visible{outline-offset:-2px}.disclosure{width:22px;min-width:22px;min-height:29px;padding:6px 0;opacity:.7;font-size:12px;border-radius:5px}.disclosure:hover{background:var(--dn-hover);opacity:1}.chevron{display:block;transition:transform 160ms cubic-bezier(.2,.8,.2,1)}.disclosure[aria-expanded=true] .chevron{transform:rotate(90deg)}.leaf{width:22px;flex-shrink:0}.open{position:fixed;pointer-events:auto;width:30px;height:30px;border-radius:8px;background:var(--dn-bg);color:var(--dn-text);font-size:21px}.open:hover{background:var(--dn-hover)}.icon,.open,.heading,.disclosure{transition:background-color 120ms ease,color 120ms ease,transform 100ms ease}.icon:active,.open:active{transform:scale(.9)}.heading:active{transform:translateX(1px) scale(.985)}.disclosure:active{transform:scale(.92)}.status{position:fixed;bottom:110px;left:50%;transform:translateX(-50%);background:var(--dn-bg);color:var(--dn-strong);padding:10px 16px;border:1px solid var(--dn-line);border-radius:12px;box-shadow:var(--dn-shadow);max-width:min(90vw,420px)}
@@ -160,7 +161,7 @@
     if(!contextAlive())return;
     const marked=bookmarks.has(previewTurnId);
     const stable=previewTurnId && !previewTurnId.startsWith('local-') && !adapter.isDraftKey(currentKey);
-    bookmarkButton.disabled=!stable || bookmarkLoading || !hasStorage();
+    bookmarkButton.disabled=!stable || bookmarkLoading || bookmarkWrites.has(bookmarkKey(currentKey,previewTurnId)) || !hasStorage();
     bookmarkButton.setAttribute('aria-pressed',String(marked));
     bookmarkButton.setAttribute('aria-label',marked?'取消标记此轮对话':'标记此轮对话');
     bookmarkButton.title=stable?(marked?'取消标记':'标记此轮对话'):(adapter.isDraftKey(currentKey)?'会话保存后可标记此轮对话':'当前轮次暂不可标记');
@@ -194,44 +195,82 @@
   function showPreview(turn, tick) {
     if(!contextAlive())return;
     clearTimeout(previewHideTimer);previewTurnId=turn.id;previewTick=tick;
-    const r=tick.getBoundingClientRect();
+    preview.hidden=false;updatePreview();
+  }
+  function updatePreview() {
+    const turn=turns.find(turn=>turn.id===previewTurnId);
+    previewTick=Array.from(rail.children).find(tick=>tick.dataset.id===previewTurnId)||null;
+    if(!turn || !previewTick) {
+      const hadFocus=shadow.activeElement===bookmarkButton;
+      preview.hidden=true;previewTurnId=null;
+      if(hadFocus)(Array.from(rail.children).find(tick=>tick.dataset.id===active?.id)||rail.firstElementChild)?.focus({preventScroll:true});
+      return;
+    }
+    const r=previewTick.getBoundingClientRect();
     $('.eyebrow').textContent=`第 ${turn.ordinal} 轮${liveElement(turn)?'':' · 暂未加载'}`;
     $('.question').textContent=turn.user?.text?.slice(0,160)||'（无文本提问）';
     $('.answer').textContent=turn.assistant?.text?.slice(0,260)||'等待回答…';
     updateBookmarkButton();
-    preview.hidden=false;
     preview.style.left=`${Math.min(r.right+12,innerWidth-preview.offsetWidth-12)}px`;
     preview.style.top=`${Math.max(12,Math.min(r.top-25,innerHeight-preview.offsetHeight-16))}px`;
   }
+  function revealRailTick(tick) {
+    if(tick.offsetTop<rail.scrollTop)rail.scrollTop=tick.offsetTop;
+    else if(tick.offsetTop+tick.offsetHeight>rail.scrollTop+rail.clientHeight)rail.scrollTop=tick.offsetTop+tick.offsetHeight-rail.clientHeight+8;
+  }
   function renderRail() {
     const sig=turns.map(t=>t.id).join('|');
+    const focused=shadow.activeElement;
+    const focusedId=focused?.classList.contains('tick')?focused.dataset.id:focused===bookmarkButton?previewTurnId:null;
     if(sig!==railSignature) {
-      railSignature=sig; rail.replaceChildren();
-      for(const turn of turns) {
-        const tick=button(`第 ${turn.ordinal} 轮：${turn.user?.text?.slice(0,60)||'对话'}`,'tick',()=>navigate(turn.id));
-        tick.dataset.baseLabel=tick.getAttribute('aria-label');
-        tick.dataset.id=turn.id;
-        tick.addEventListener('mouseenter',()=>showPreview(turns.find(t=>t.id===turn.id)||turn,tick));
-        tick.addEventListener('focus',()=>showPreview(turns.find(t=>t.id===turn.id)||turn,tick));
-        tick.addEventListener('keydown',event=>{if(event.key==='Tab'&&!event.shiftKey&&!bookmarkButton.disabled){event.preventDefault();bookmarkButton.focus();}});
-        tick.addEventListener('mouseleave',schedulePreviewHide);
-        tick.addEventListener('blur',schedulePreviewHide);rail.append(tick);
+      railSignature=sig;
+      railNeedsReveal=!!focusedId;
+      const oldScroll=rail.scrollTop, existing=new Map(Array.from(rail.children,tick=>[tick.dataset.id,tick]));
+      for(const [index,turn] of turns.entries()) {
+        let tick=existing.get(turn.id);
+        existing.delete(turn.id);
+        if(!tick) {
+          tick=button('对话','tick',()=>navigate(turn.id));
+          tick.dataset.id=turn.id;
+          tick.addEventListener('mouseenter',()=>showPreview(turns.find(t=>t.id===turn.id)||turn,tick));
+          tick.addEventListener('focus',()=>{
+            revealRailTick(tick);showPreview(turns.find(t=>t.id===turn.id)||turn,tick);
+          });
+          tick.addEventListener('keydown',event=>{if(event.key==='Tab'&&!event.shiftKey&&!bookmarkButton.disabled&&!preview.hidden){event.preventDefault();bookmarkButton.focus();}});
+          tick.addEventListener('mouseleave',schedulePreviewHide);
+          tick.addEventListener('blur',schedulePreviewHide);
+        }
+        // Reuse ticks so streaming and newly loaded history do not discard focus.
+        if(rail.children[index]!==tick)rail.insertBefore(tick,rail.children[index]||null);
       }
+      for(const tick of existing.values())tick.remove();
+      rail.scrollTop=oldScroll;
     }
-    for(const tick of rail.children) {
+    for(const [index,tick] of Array.from(rail.children).entries()) {
+      const turn=turns[index];
       const isActive=tick.dataset.id===active?.id;
       tick.classList.toggle('active',isActive);
       tick.classList.toggle('marked',bookmarks.has(tick.dataset.id));
-      tick.setAttribute('aria-label',tick.dataset.baseLabel+(bookmarks.has(tick.dataset.id)?'，已标记':''));
+      tick.setAttribute('aria-label',`第 ${turn.ordinal} 轮：${turn.user?.text?.slice(0,60)||'对话'}${bookmarks.has(turn.id)?'，已标记':''}`);
       if(isActive)tick.setAttribute('aria-current','step');else tick.removeAttribute('aria-current');
     }
+    if(focused?.classList.contains('tick') && shadow.activeElement!==focused) {
+      const ticks=Array.from(rail.children);
+      const replacement=ticks.find(tick=>tick.dataset.id===focusedId)||ticks.find(tick=>tick.dataset.id===active?.id)||ticks[0];
+      replacement?.focus({preventScroll:true});
+    }
+    if(!preview.hidden)updatePreview();
   }
   function renderTree() {
     const list=headings(active);
     const signature=`${active?.id}|${list.map(h=>`${h.id}:${h.level}:${h.text}`).join('|')}`;
     if(signature!==treeSignature) {
+      const savedScroll=treeTurnId===active?.id?tree.scrollTop:0;
+      const focused=tree.contains(shadow.activeElement)?shadow.activeElement:null;
+      const focusedId=focused?.closest('.row')?.dataset.id;
+      const focusedControl=focused?.classList.contains('disclosure')?'.disclosure':'.heading';
       for(const animation of branchAnimations.values())animation.cancel();branchAnimations.clear();
-      treeSignature=signature; tree.replaceChildren();
+      treeSignature=signature;treeTurnId=active?.id;tree.replaceChildren();
       const font=getComputedStyle(toc);
       if(textMetrics)textMetrics.font=`${font.fontWeight} ${font.fontSize} ${font.fontFamily}`;
       let requiredWidth=0;
@@ -262,6 +301,13 @@
       append(buildTree(list),tree);
       updateFoldAll();
       preferredPanelWidth=Math.min(360,Math.max(280,Math.ceil(requiredWidth)));
+      if(focused) {
+        const row=Array.from(tree.querySelectorAll('.row')).find(row=>row.dataset.id===focusedId);
+        const replacement=row?.querySelector(focusedControl)||row?.querySelector('.heading');
+        if(replacement && !replacement.closest('[hidden],[inert]'))replacement.focus({preventScroll:true});
+        else if(list.length)$('.collapse').focus({preventScroll:true});
+      }
+      tree.scrollTop=savedScroll;
     }
     highlightHeadings();
   }
@@ -303,13 +349,16 @@
     rail.style.left=`${leftEdge+40}px`;rail.style.top='50%';rail.style.transform='translateY(-50%)';
     rail.style.gap=turns.length>60?'1px':'3px';
     for(const tick of rail.children)tick.style.height=turns.length>60?'8px':'13px';
+    if(railNeedsReveal) {
+      const focusedTick=shadow.activeElement?.classList.contains('tick')?shadow.activeElement:shadow.activeElement===bookmarkButton?previewTick:null;
+      if(!rail.hidden && focusedTick?.isConnected)revealRailTick(focusedTick);
+      railNeedsReveal=false;
+      if(!preview.hidden)updatePreview();
+    }
     if(rail.hidden)lastRailActive=null;
-    else if(lastRailActive!==active?.id) {
+    else if(lastRailActive!==active?.id && !rail.matches(':focus-within') && shadow.activeElement!==bookmarkButton) {
       const selected=Array.from(rail.children).find(t=>t.dataset.id===active?.id);
-      if(selected) {
-        if(selected.offsetTop<rail.scrollTop)rail.scrollTop=selected.offsetTop;
-        else if(selected.offsetTop+selected.offsetHeight>rail.scrollTop+rail.clientHeight)rail.scrollTop=selected.offsetTop+selected.offsetHeight-rail.clientHeight+8;
-      }
+      if(selected)revealRailTick(selected);
       lastRailActive=active?.id;
     }
     const rightInset=Math.min(40,Math.max(12,(rightEdge-leftEdge-260)/2));
@@ -418,7 +467,7 @@
       // Do not mistake that old DOM for virtualized history of the new route.
       routeExclusions=new WeakMap(seenRouteMessages);seenRouteMessages=new Map();
       currentKey=snapshot.key;store.reset(currentKey);active=null;folded.clear();
-      manualClosed=false;userClosed=false;temporaryOpen=false;wasStreaming=false;treeSignature=railSignature=null;cancelNavigation();
+      manualClosed=false;userClosed=false;temporaryOpen=false;wasStreaming=false;treeSignature=railSignature=null;treeTurnId=null;cancelNavigation();
       nativePanel=null;panelTemporaryOpen=false;
       pendingDraftId=null;
       setTocVisible(false,true);
@@ -452,12 +501,13 @@
     const key=currentKey, id=previewTurnId;
     if(bookmarkButton.disabled || !id)return;
     const marked=bookmarks.has(id), storageKey=bookmarkKey(key,id);
-    bookmarkButton.disabled=true;
+    bookmarkWrites.add(storageKey);updateBookmarkButton();
     try {
       if(marked)await chrome.storage.local.remove(storageKey);
       else await chrome.storage.local.set({[storageKey]:true});
-      if(currentKey===key){if(marked)bookmarks.delete(id);else bookmarks.add(id);renderRail();updateBookmarkButton();}
-    } catch {if(contextAlive()&&currentKey===key){updateBookmarkButton();notify('标记保存失败，请重试');}}
+      if(contextAlive()&&currentKey===key){if(marked)bookmarks.delete(id);else bookmarks.add(id);renderRail();}
+    } catch {if(contextAlive()&&currentKey===key)notify('标记保存失败，请重试');}
+    finally {bookmarkWrites.delete(storageKey);if(contextAlive())updateBookmarkButton();}
   });
   bookmarkButton.addEventListener('keydown',event=>{if(event.key==='Tab'&&event.shiftKey&&previewTick?.isConnected){event.preventDefault();previewTick.focus();}});
   preview.addEventListener('mouseenter',()=>clearTimeout(previewHideTimer));
@@ -487,8 +537,10 @@
     setTocVisible(panelTarget===true,true);
     for(const animation of branchAnimations.values())animation.finish();
   },{signal:lifecycle.signal});
-  rail.addEventListener('scroll',()=>{preview.hidden=true;},{passive:true});
-  window.addEventListener('scroll',()=>{preview.hidden=true;schedulePosition();},{passive:true,capture:true,signal:lifecycle.signal});
+  rail.addEventListener('scroll',()=>{
+    if(!preview.hidden && (rail.matches(':focus-within')||shadow.activeElement===bookmarkButton))updatePreview();else preview.hidden=true;
+  },{passive:true});
+  window.addEventListener('scroll',event=>{if(event.composedPath().includes(host))return;preview.hidden=true;schedulePosition();},{passive:true,capture:true,signal:lifecycle.signal});
   window.addEventListener('resize',()=>{scheduleScan();schedulePosition();},{passive:true,signal:lifecycle.signal});
   window.addEventListener('wheel',cancelNavigation,{passive:true,signal:lifecycle.signal});
   window.addEventListener('touchstart',cancelNavigation,{passive:true,signal:lifecycle.signal});

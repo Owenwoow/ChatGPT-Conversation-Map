@@ -25,6 +25,18 @@ async function blockExportScenario(page,popup) {
   await page.locator('#user-card').hover();await expect(host).toBeHidden();
   const before=await chart.boundingBox();
   await page.locator('#inner-card p').first().hover();await expect(copy).toBeVisible();
+  if (popup) {
+   assert.deepEqual(await popup.locator('body').evaluate(el=>({width:el.offsetWidth,height:el.offsetHeight})),{width:392,height:560});
+   await popup.locator('main').hover();await popup.mouse.wheel(0,500);
+   await expect.poll(()=>popup.locator('main').evaluate(el=>el.scrollTop)).toBeGreaterThan(0);
+   await expect(popup.locator('#blockCopyEnabled')).toBeChecked();
+   await popup.locator('#blockCopyEnabled').uncheck();await expect(host).toBeHidden();
+   await page.locator('#inner-card p').first().hover();await expect(host).toBeHidden();
+   await popup.reload();await expect(popup.locator('#blockCopyEnabled')).not.toBeChecked();
+   await popup.locator('#blockCopyEnabled').check();
+   await page.locator('#ordinary').hover();await page.locator('#inner-card p').first().hover();await expect(copy).toBeVisible();
+   console.log('PASS 固定尺寸设置页内部滚动、图块复制开关即时生效及刷新保存');
+  }
   assert.deepEqual(await chart.boundingBox(),before,'悬停入口不得挤动图块布局');
   await expect(host.locator('.outline,.toolbar,.more,.menu')).toHaveCount(0);
   await expect(copy.locator('.copy-icon')).toBeVisible();
