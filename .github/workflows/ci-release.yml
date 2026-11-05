@@ -2,10 +2,7 @@ name: 测试与发布
 
 on:
   push:
-    branches: ['**']
     tags: ['v*']
-  pull_request:
-  workflow_dispatch:
 
 permissions:
   contents: read
