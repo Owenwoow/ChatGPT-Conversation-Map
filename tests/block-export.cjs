@@ -111,9 +111,12 @@ async function blockExportScenario(page,popup) {
   console.log('PASS 新版 search-unit 结构、深浅色与窄屏入口定位');
 
   if (popup) {
-   await popup.evaluate(()=>chrome.runtime.reload());await expect(host).toHaveCount(0);
+   const readyPopup=await require('./context-reload-scenario.cjs').reloadExtension(page,popup);
+   await expect(host).toHaveCount(0);
    await page.reload();await expect(host).toHaveCount(1);
    console.log('PASS MV3 隔离环境下真实复制、扩展重载后旧模块退出及刷新恢复');
+   assert.deepEqual(errors,[],'图块导出不应产生页面异常');
+   return readyPopup;
   }
   assert.deepEqual(errors,[],'图块导出不应产生页面异常');
  } finally {page.off('pageerror',onError);}

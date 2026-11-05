@@ -16,7 +16,7 @@ const path=require('node:path');
   const manager=await context.newPage();await manager.goto('chrome://extensions');
   const item=manager.locator('extensions-item').filter({hasText:'ChatGPT 对话地图'});
   await expect(item).toHaveCount(1);const id=await item.getAttribute('id');
-  const popup=await context.newPage();await popup.goto(`chrome-extension://${id}/popup/index.html`);
+  let popup=await context.newPage();await popup.goto(`chrome-extension://${id}/popup/index.html`);
   await expect(popup.locator('#leftEnabled')).toBeChecked();
   await popup.locator('#leftEnabled').uncheck();await expect(root.locator('.rail')).toBeHidden();
   await popup.locator('#leftEnabled').check();await expect(root.locator('.rail')).toBeVisible();
@@ -81,7 +81,7 @@ const path=require('node:path');
   await require('./draft-scenario.cjs')(page);
   console.log('PASS 真实MV3隔离环境下临时会话转正式会话，首次目录动态更新且保持历史隔离');
   await require('./immersive-scenario.cjs')(page,popup);
-  await require('./block-export.cjs')(page,popup);
+  popup=await require('./block-export.cjs')(page,popup);
   await require('./context-reload-scenario.cjs')(page,popup);
  } finally {await context?.close();await fs.rm(profile,{recursive:true,force:true});}
 })().catch(e=>{console.error(e);process.exitCode=1;});
