@@ -1,6 +1,12 @@
 <div align="center">
   <img src="icons/icon128.png" width="72" height="72" alt="ChatGPT 对话地图图标">
   <h1>ChatGPT 对话地图</h1>
+  <p>
+    <a href="https://github.com/Owenwoow/ChatGPT-Conversation-Map/releases/latest"><img src="https://img.shields.io/github/v/release/Owenwoow/ChatGPT-Conversation-Map?label=release&amp;color=555" alt="最新发行版本"></a>
+    <a href="https://github.com/Owenwoow/ChatGPT-Conversation-Map/releases"><img src="https://img.shields.io/github/downloads/Owenwoow/ChatGPT-Conversation-Map/total?label=downloads&amp;color=555" alt="发行包总下载量"></a>
+    <a href="https://github.com/Owenwoow/ChatGPT-Conversation-Map/actions/workflows/ci-release.yml"><img src="https://img.shields.io/github/actions/workflow/status/Owenwoow/ChatGPT-Conversation-Map/ci-release.yml?branch=main&amp;label=checks" alt="自动化检查的实际状态"></a>
+    <a href="manifest.json"><img src="https://img.shields.io/badge/Manifest-V3-555" alt="Manifest V3"></a>
+  </p>
   <p><strong>长对话，也能轻松找到方向。</strong></p>
   <p>左侧回到某轮提问，右侧直达回答章节。把滚动查找变成有迹可循的阅读。</p>
   <p>Chrome / Edge · Manifest V3 · 原生 JavaScript · 仅本地处理</p>

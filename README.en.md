@@ -1,6 +1,12 @@
 <div align="center">
   <img src="icons/icon128.png" width="72" height="72" alt="ChatGPT Conversation Map icon">
   <h1>ChatGPT Conversation Map</h1>
+  <p>
+    <a href="https://github.com/Owenwoow/ChatGPT-Conversation-Map/releases/latest"><img src="https://img.shields.io/github/v/release/Owenwoow/ChatGPT-Conversation-Map?label=release&amp;color=555" alt="Latest release"></a>
+    <a href="https://github.com/Owenwoow/ChatGPT-Conversation-Map/releases"><img src="https://img.shields.io/github/downloads/Owenwoow/ChatGPT-Conversation-Map/total?label=downloads&amp;color=555" alt="Total release downloads"></a>
+    <a href="https://github.com/Owenwoow/ChatGPT-Conversation-Map/actions/workflows/ci-release.yml"><img src="https://img.shields.io/github/actions/workflow/status/Owenwoow/ChatGPT-Conversation-Map/ci-release.yml?branch=main&amp;label=checks" alt="Actual automated check status"></a>
+    <a href="manifest.json"><img src="https://img.shields.io/badge/Manifest-V3-555" alt="Manifest V3"></a>
+  </p>
   <p><strong>Find your way through long conversations.</strong></p>
   <p>Return to a question on the left. Jump to a section on the right. Spend less time scrolling.</p>
   <p>Chrome / Edge · Manifest V3 · Vanilla JavaScript · Local processing</p>
