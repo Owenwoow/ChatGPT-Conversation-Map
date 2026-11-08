@@ -128,6 +128,12 @@ For development, use a separate Chrome profile and load the repository root. Aft
 | [`popup/`](popup/) | Settings interface and language adaptation. |
 | [`tests/`](tests/) | Unit tests, fixtures, and extension tests. |
 
+### Release workflow
+
+- Review the diff and verify version numbers locally. Commit the changes, create a `v*` version tag, then push the branch and tag. Run local tests for targeted troubleshooting.
+- The tag push triggers [GitHub Actions](.github/workflows/ci-release.yml) to run the full test suite, generate test output, build the ZIP, and create the release. Check logs and artifacts in GitHub Actions by default.
+- Monitor a single workflow run and read status changes and relevant logs from failed steps. Package locally only when CI cannot produce the ZIP and a manual release is necessary.
+
 Release ZIPs include the files required to run the extension and `LICENSE`. `release/`, test output, and dependency directories are excluded from version control.
 
 ## License
