@@ -162,6 +162,15 @@ async function blockExportScenario(page,popup) {
   }
   console.log('PASS 商品图文整组 HTML 复制，过滤图片控件及已有官方下载的组件');
 
+  // ChatGPT may save the URL while the visible transcript still has a local marker.
+  await page.evaluate(()=>{
+   document.querySelector('#thread').dataset.chatgptConversationSelectionTarget='other-saved-conversation';
+  });
+  await page.locator('#plan-grid p').first().hover();await expect(host).toBeHidden();
+  await page.evaluate(()=>{
+   document.querySelector('#thread').dataset.chatgptConversationSelectionTarget='local-chatgpt:live-draft';
+  });
+  await page.mouse.move(10,70);
   await page.locator('#plan-grid p').first().hover();await expect(copy).toBeVisible();
   const planBounds=await page.locator('#plan-card').boundingBox();
   const planCopyBounds=await copy.boundingBox();
@@ -172,7 +181,8 @@ async function blockExportScenario(page,popup) {
   for(const text of ['计划记录','已完成 30 项','周期 45 天','备注：来源见附件','plan.json'])assert(plan.includes(text));
   assert(!/外部说明不应被复制|role=|aria-haspopup=|tabindex=/.test(plan));
   await page.locator('#custom-control-card p').hover();await expect(host).toBeHidden();
-  console.log('PASS 含行内附件的卡片整框复制，按钮锚定外框右上角');
+  await page.evaluate(()=>document.querySelector('#thread').removeAttribute('data-chatgpt-conversation-selection-target'));
+  console.log('PASS 保存后的临时标记支持整框复制，其他已保存会话标记仍排除');
 
   await page.evaluate(()=>{
    const response=document.querySelector('[data-dil-response]');

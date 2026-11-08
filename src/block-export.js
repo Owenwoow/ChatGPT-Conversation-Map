@@ -110,8 +110,10 @@
   function show(block) {
     if (!enabled) return;
     if (block === current) {clearTimeout(hideTimer); return;}
-    // Reuse the adapter's route/preview filtering, only when entering a new block.
-    const snapshot = adapter.scan();
+    // A newly saved conversation can keep its local DOM marker. Copying uses
+    // the hovered transcript, so pass that marker without allowing other drafts.
+    const draftId = block.closest(adapter.selectors.conversation)?.getAttribute('data-chatgpt-conversation-selection-target');
+    const snapshot = adapter.scan({draftId});
     if (!snapshot.messages.some(message => message.role === 'assistant' && message.element.contains(block))) return;
     hide(); current = block; route = adapter.getKey();
     if (!host.isConnected) document.documentElement.append(host);
