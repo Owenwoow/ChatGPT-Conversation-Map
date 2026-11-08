@@ -25,7 +25,7 @@
 | --- | --- |
 | Find an earlier question and answer. | The **conversation minimap** displays one tick per turn. Hover or focus a tick to preview an excerpt, then click to jump. Scroll the minimap in long chats. |
 | Return to an important turn later. | Add or remove **bookmarks** in the preview. Bookmarks for saved conversations stay on your device and survive page reloads. |
-| Read a specific section of a long answer. | The **hierarchical answer outline** recognizes H1–H6 headings, supports section jumps, highlights the current heading, and lets you collapse subtrees or all top-level subtrees at once. |
+| Read a specific section of a long answer. | The **hierarchical answer outline** recognizes H1–H6 headings, supports section jumps, highlights the current heading, and lets you expand or collapse branches individually or all at once. |
 | Follow an answer as it is generated. | **Live updates** add headings during generation. Scrolling keeps the current turn and heading in sync; selecting another turn switches its outline. |
 | Keep the reading area comfortable. | The **adaptive layout** sizes the outline to available space. Optional **immersive mode** closes the ChatGPT sidebar after each successfully sent message. |
 | Save a card or grid to your notes. | **Block copying** adds a copy icon to supported static cards and grids, preserving layout, colors, and editable text where possible for pasting into Obsidian. |
@@ -71,9 +71,9 @@ The minimap needs **at least two turns** and enough page content to scroll. Hove
 
 ### Browse answer sections
 
-The outline appears only when the answer contains headings. Click a heading to jump to it, or its arrow to collapse or expand its subtree. Hover a long heading to see its full text. The double-arrow button collapses all top-level subtrees; click again to expand them. Individual deeper collapse states are preserved.
+The outline appears only when the answer contains headings. Click a heading to jump to it, or its arrow to collapse or expand its subtree. Hover a long heading to see its full text. The toolbar button cycles through expanding all branches, collapsing them to the outermost headings, and restoring the default behavior. Its icon and tooltip show the next action. Short outlines open fully, and long outlines expand as you scroll.
 
-Code, hidden content, headings inside bordered cards, and numeric display components are excluded. When space is limited, use the outline button to open an overlay. The minimap hides when there is too little space on the left, keeping the answer unobstructed.
+The outline includes section headings and the title on a rich response's cover card. It skips code, hidden content, and titles inside charts, product cards, and metrics. When space is limited, use the outline button to open an overlay. The minimap hides when there is too little space on the left, keeping the answer unobstructed.
 
 When a ChatGPT link preview opens on the right, the outline moves out of its way or collapses to a button, then restores its previous state when the preview closes. Preview content is excluded from turns and headings. Manually opened outlines stay open until closed manually or with Escape. Switching conversations re-detects the current chat; expansion state is not persisted.
 
@@ -81,7 +81,7 @@ When a ChatGPT link preview opens on the right, the outline moves out of its way
 
 Hover a supported static card or grid in an answer and click its top-right copy icon. A green check briefly confirms success. Paste into **Obsidian's source mode**, then switch to reading view.
 
-Block copying is intended for static content. Interactive forms, images, and canvases are not copied. Scripts, page class names, and external style dependencies are removed; themes, fonts, and complex SVGs may look different after pasting.
+Block copying preserves text and HTTPS image links in static cards and grids. Components with a native download use the site's own control. Interactive forms and canvases stay on the page. Exported HTML uses inline styles and strips scripts and page controls.
 
 ## Privacy and permissions
 

@@ -15,7 +15,9 @@
     sidePanel: '[data-summary-panel-variant], aside, [role="complementary"], [role="dialog"], [data-testid*="side-panel"], [data-testid*="sidebar"]',
     sidebarTrigger: 'button[data-app-shell-sidebar-trigger][aria-controls="app-shell-sidebar"]',
     sidebarControl: 'button[aria-controls="app-shell-sidebar"]',
-    outlineExcluded: 'pre,code,[hidden],[inert],[aria-hidden="true"],[data-d-component="box"][data-d-has-border],[data-d-component="box"] [data-d-component="title"][data-d-tabular-nums="true"]',
+    richResponse: '[data-dil-response]',
+    outlineExcluded: 'pre,code,figure,table,button,[role="button"],[role="toolbar"],[hidden],[inert],[aria-hidden="true"]',
+    legacyOutlineExcluded: '[data-d-component="box"][data-d-has-border],[data-d-component="box"] [data-d-component="title"][data-d-tabular-nums="true"]',
     stop: '[data-testid="stop-button"], button[aria-label="Stop generating"], button[aria-label="停止生成"], button[aria-label="停止流式传输"]',
     streaming: '[data-is-streaming="true"], .result-streaming'
   });
@@ -77,9 +79,27 @@
     return document.scrollingElement || document.documentElement;
   }
 
+  const headingTags = 'h1,h2,h3,h4,h5,h6';
+
+  function isRichCoverHeading(heading, response) {
+    // A rich answer can put its document title in a cover card before the chapters.
+    const box = heading.parentElement;
+    return heading.matches('h1:first-child[data-d-component="title"][data-d-size="2xl"]:not([data-d-tabular-nums="true"])') &&
+      box.parentElement === response && box.matches('[data-d-component="box"][data-d-has-border]') &&
+      box === response.querySelector(`:scope > :is(${headingTags},[data-d-component="box"],[data-d-component="grid"],[data-d-component="card"])`) &&
+      !response.querySelector(':scope > h1') && !!response.querySelector(':scope > h2');
+  }
+
   function headingRecords(body, messageId) {
-    return Array.from(body.querySelectorAll('h1,h2,h3,h4,h5,h6'))
-      .filter(element => !element.closest(SELECTORS.outlineExcluded))
+    return Array.from(body.querySelectorAll(headingTags))
+      .filter(element => {
+        if (element.closest(SELECTORS.outlineExcluded)) return false;
+        // Rich responses render chapter headings directly in the response.
+        // Cards, grids and other components reuse the same heading tags inside it.
+        const richResponse = element.closest(SELECTORS.richResponse);
+        if (richResponse) return element.parentElement === richResponse || isRichCoverHeading(element, richResponse);
+        return !element.closest(SELECTORS.legacyOutlineExcluded);
+      })
       .map((element, index) => ({
         id: `${messageId}:heading:${index}`,
         level: Number(element.tagName.slice(1)),

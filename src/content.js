@@ -30,7 +30,8 @@
   let domObserver = null, themeObserver = null, routeInterval = 0, disposed = false;
   let extensionRuntime = false;
   try {extensionRuntime=!!globalThis.chrome?.runtime?.id;} catch {}
-  const folded = new Set();
+  const autoFoldThreshold = 12;
+  const outlinePreferences = new Map();
   const host = document.createElement('div');
   host.id = 'dual-navigator-host';
   host.dataset.build = build;
@@ -43,11 +44,13 @@
     .tick{position:relative}.tick.marked:after{width:21px;opacity:1;background:var(--dn-bookmark)}.tick.marked.active:after{width:23px;background:var(--dn-strong)}.tick.marked.active:before{content:"";position:absolute;right:0;width:3px;height:3px;border-radius:50%;background:var(--dn-bookmark)}.preview .question{padding-right:25px}.bookmark-toggle{position:absolute;right:11px;top:11px;width:26px;height:26px;border-radius:6px;display:grid;place-items:center}.bookmark-toggle:hover{background:var(--dn-hover)}.bookmark-toggle svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linejoin:round}.bookmark-toggle[aria-pressed=true] svg{fill:var(--dn-strong);stroke:var(--dn-strong)}.bookmark-toggle:disabled{opacity:.35;cursor:default}
     .toc{position:fixed;width:280px;pointer-events:auto;max-height:calc(100vh - 180px);display:flex;flex-direction:column;transform-origin:top right}.toc[data-state=opening],.toc[data-state=closing]{will-change:opacity,transform}.toc[data-state=closing]{pointer-events:none}.toc.overlay{padding:8px;border:1px solid var(--dn-line);border-radius:12px;background:var(--dn-bg);box-shadow:var(--dn-shadow)}.toc-head{display:flex;justify-content:flex-end;margin-bottom:2px;padding:0 3px}.icon{width:26px;height:26px;border-radius:6px;font-size:18px}.icon:hover{background:var(--dn-hover);color:var(--dn-strong)}.tree{overflow:auto;scrollbar-width:thin;scrollbar-color:var(--dn-line) transparent;overscroll-behavior:contain;padding:3px 3px 10px;min-height:0}.branch{position:relative}.children{margin-left:10px;padding-left:6px;border-left:1px solid var(--dn-line);overflow:hidden}.row{display:flex;align-items:flex-start;margin:2px 0;min-height:29px}.row:hover>.heading,.row.active>.heading{background:var(--dn-hover)}.row.active>.heading{color:var(--dn-strong)}.heading{padding:6px 8px;text-align:left;line-height:1.55;flex:1;min-width:0;border-radius:6px;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.heading:focus-visible{outline-offset:-2px}.disclosure{width:22px;min-width:22px;min-height:29px;padding:6px 0;opacity:.7;font-size:12px;border-radius:5px}.disclosure:hover{background:var(--dn-hover);opacity:1}.chevron{display:block;transition:transform 160ms cubic-bezier(.2,.8,.2,1)}.disclosure[aria-expanded=true] .chevron{transform:rotate(90deg)}.leaf{width:22px;flex-shrink:0}.open{position:fixed;pointer-events:auto;width:30px;height:30px;border-radius:8px;background:var(--dn-bg);color:var(--dn-text);font-size:21px}.open:hover{background:var(--dn-hover)}.icon,.open,.heading,.disclosure{transition:background-color 120ms ease,color 120ms ease,transform 100ms ease}.icon:active,.open:active{transform:scale(.9)}.heading:active{transform:translateX(1px) scale(.985)}.disclosure:active{transform:scale(.92)}.status{position:fixed;bottom:110px;left:50%;transform:translateX(-50%);background:var(--dn-bg);color:var(--dn-strong);padding:10px 16px;border:1px solid var(--dn-line);border-radius:12px;box-shadow:var(--dn-shadow);max-width:min(90vw,420px)}
     .fold-all{display:grid;place-items:center}.fold-all svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+    .fold-all [data-icon]{display:none}.fold-all[data-action=expand] [data-icon=expand],.fold-all[data-action=collapse] [data-icon=collapse],.fold-all[data-action=restore] [data-icon=restore]{display:inline}
     @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}@media(max-width:700px){.preview{width:260px}}
-  </style><nav class="rail" aria-label="对话轮次" hidden></nav><aside class="preview" hidden><div class="eyebrow"></div><div class="question"></div><button class="bookmark-toggle" type="button" aria-label="标记此轮对话" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 21V5a3 3 0 0 1 3-3h6a3 3 0 0 1 3 3v16l-6-4z"></path></svg></button><p class="answer"></p></aside><aside class="toc" id="answer-outline" aria-label="当前回答目录" hidden><header class="toc-head"><button class="icon fold-all" type="button" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5-5 5 5M7 15l5 5 5-5"></path></svg></button><button class="icon collapse" aria-label="收起目录" title="收起目录">−</button></header><div class="tree"></div></aside><button class="open" aria-label="展开回答目录" aria-controls="answer-outline" aria-expanded="false" title="展开回答目录" hidden>≡</button><div class="status" role="status" hidden></div>`;
+  </style><nav class="rail" aria-label="对话轮次" hidden></nav><aside class="preview" hidden><div class="eyebrow"></div><div class="question"></div><button class="bookmark-toggle" type="button" aria-label="标记此轮对话" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 21V5a3 3 0 0 1 3-3h6a3 3 0 0 1 3 3v16l-6-4z"></path></svg></button><p class="answer"></p></aside><aside class="toc" id="answer-outline" aria-label="当前回答目录" hidden><header class="toc-head"><button class="icon fold-all" type="button" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path data-icon="expand" d="m7 9 5-5 5 5M7 15l5 5 5-5"></path><path data-icon="collapse" d="m7 5 5 5 5-5M7 19l5-5 5 5"></path><path data-icon="restore" d="M3 12a9 9 0 1 1 2.7 6.4M3 6v6h6"></path></svg></button><button class="icon collapse" aria-label="收起目录" title="收起目录">−</button></header><div class="tree"></div></aside><button class="open" aria-label="展开回答目录" aria-controls="answer-outline" aria-expanded="false" title="展开回答目录" hidden>≡</button><div class="status" role="status" hidden></div>`;
   document.documentElement.append(host);
   const $ = selector => shadow.querySelector(selector);
   const rail = $('.rail'), toc = $('.toc'), tree = $('.tree'), preview = $('.preview'), opener = $('.open');
+  const foldAll = $('.fold-all');
   const bookmarkButton = $('.bookmark-toggle');
   function dispose() {
     if(disposed)return;
@@ -93,14 +96,16 @@
       toc.hidden=!show;toc.dataset.state=show?'open':'closed';panelAnimation=null;animation.cancel();
     }).catch(()=>{});
   }
-  function setChildrenExpanded(element, expanded) {
-    const wasHidden=element.hidden;
-    const fromHeight=wasHidden?0:element.getBoundingClientRect().height;
-    const fromOpacity=wasHidden?0:Number(getComputedStyle(element).opacity);
+  function setChildrenExpanded(element, expanded, immediate=false) {
+    const animate=!immediate&&!motionPreference.matches;
+    const hasStart=animate&&!element.hidden;
+    const fromHeight=hasStart?element.getBoundingClientRect().height:0;
+    const fromOpacity=hasStart?Number(getComputedStyle(element).opacity):0;
     branchAnimations.get(element)?.cancel();branchAnimations.delete(element);
-    element.hidden=false;element.inert=!expanded;element.setAttribute('aria-hidden',String(!expanded));
+    element.hidden=!animate&&!expanded;element.inert=!expanded;element.setAttribute('aria-hidden',String(!expanded));
+    if(!animate)return;
     const targetHeight=expanded?element.getBoundingClientRect().height:0;
-    if(motionPreference.matches||fromHeight===targetHeight) {element.hidden=!expanded;return;}
+    if(fromHeight===targetHeight) {element.hidden=!expanded;return;}
     const animation=element.animate([{height:`${fromHeight}px`,opacity:fromOpacity},{height:`${targetHeight}px`,opacity:expanded?1:0}],{duration:expanded?180:140,easing:'cubic-bezier(.2,.8,.2,1)',fill:'both'});
     branchAnimations.set(element,animation);
     animation.finished.then(()=>{
@@ -264,7 +269,10 @@
   function renderTree() {
     const list=headings(active);
     const signature=`${active?.id}|${list.map(h=>`${h.id}:${h.level}:${h.text}`).join('|')}`;
-    if(signature!==treeSignature) {
+    const rebuilt=signature!==treeSignature;
+    if(rebuilt) {
+      const answerId=active?.assistant?.id;
+      const preferences=outlinePreferences.get(answerId);
       const savedScroll=treeTurnId===active?.id?tree.scrollTop:0;
       const focused=tree.contains(shadow.activeElement)?shadow.activeElement:null;
       const focusedId=focused?.closest('.row')?.dataset.id;
@@ -282,24 +290,27 @@
           const row=document.createElement('div');row.className='row';row.dataset.id=node.id;
           let children;
           if(node.children.length) {
+            const expanded=preferences?.branches.get(node.id)??preferences?.expandedAll??true;
             const toggle=button(`折叠或展开：${node.text}`,'disclosure',()=>{
-              if(folded.has(node.id))folded.delete(node.id);else folded.add(node.id);
-              const expanded=!folded.has(node.id);toggle.setAttribute('aria-expanded',String(expanded));toggle.title=expanded?'收起子章节':'展开子章节';
-              setChildrenExpanded(children,expanded);updateFoldAll();highlightHeadings();
+              const expand=toggle.getAttribute('aria-expanded')==='false';
+              const current=outlinePreferences.get(answerId)||{branches:new Map()};
+              current.branches.set(node.id,expand);
+              outlinePreferences.set(answerId,current);
+              setBranchExpanded(toggle,expand);
             });
             const chevron=document.createElement('span');chevron.className='chevron';chevron.textContent='›';chevron.setAttribute('aria-hidden','true');toggle.append(chevron);
-            toggle.setAttribute('aria-expanded',String(!folded.has(node.id)));toggle.title=folded.has(node.id)?'展开子章节':'收起子章节';row.append(toggle);
+            toggle.setAttribute('aria-expanded',String(expanded));toggle.title=expanded?'收起子章节':'展开子章节';row.append(toggle);
             children=document.createElement('div');children.id=`dn-branch-${++branchNumber}`;toggle.setAttribute('aria-controls',children.id);
+            children.className='children';children.hidden=!expanded;children.inert=!expanded;children.setAttribute('aria-hidden',String(!expanded));
           } else {const spacer=document.createElement('span');spacer.className='leaf';row.append(spacer);}
           const link=button(node.text,'heading',()=>navigate(active.id,node.id));link.textContent=node.text;link.title=node.text;row.append(link);branch.append(row);
           if(node.children.length) {
-            children.className='children';children.hidden=folded.has(node.id);children.inert=children.hidden;children.setAttribute('aria-hidden',String(children.hidden));append(node.children,children,depth+1);branch.append(children);
+            append(node.children,children,depth+1);branch.append(children);
           }
           parent.append(branch);
         }
       }
       append(buildTree(list),tree);
-      updateFoldAll();
       preferredPanelWidth=Math.min(360,Math.max(280,Math.ceil(requiredWidth)));
       if(focused) {
         const row=Array.from(tree.querySelectorAll('.row')).find(row=>row.dataset.id===focusedId);
@@ -309,27 +320,54 @@
       }
       tree.scrollTop=savedScroll;
     }
-    highlightHeadings();
+    highlightHeadings(rebuilt);
   }
-  function topLevelToggles() {
-    return Array.from(tree.children,branch=>branch.querySelector(':scope > .row > .disclosure')).filter(Boolean);
+  function setBranchExpanded(toggle, expanded, immediate=false) {
+    if(toggle.getAttribute('aria-expanded')===String(expanded))return;
+    const children=toggle.parentElement.nextElementSibling;
+    if(!expanded && children.contains(shadow.activeElement))toggle.focus({preventScroll:true});
+    toggle.setAttribute('aria-expanded',String(expanded));toggle.title=expanded?'收起子章节':'展开子章节';
+    setChildrenExpanded(children,expanded,immediate);
   }
   function updateFoldAll() {
-    const toggles=topLevelToggles(), control=$('.fold-all');
-    control.hidden=!toggles.length;
-    const label=toggles.every(toggle=>toggle.getAttribute('aria-expanded')==='false')?'展开全部子目录':'收起全部子目录';
-    control.title=label;control.setAttribute('aria-label',label);
+    foldAll.hidden=!tree.querySelector('.disclosure');
+    const expandedAll=outlinePreferences.get(active?.assistant?.id)?.expandedAll;
+    const action=expandedAll===undefined?'expand':expandedAll?'collapse':'restore';
+    foldAll.dataset.action=action;
+    const label={expand:'展开全部子目录',collapse:'收起全部子目录',restore:'恢复初始状态'}[action];
+    foldAll.title=label;foldAll.setAttribute('aria-label',label);
   }
-  function highlightHeadings() {
+  function highlightHeadings(rebuilt) {
     const list=headings(active).filter(h=>h.element?.isConnected);
     const rootTop=scrollRoot===document.scrollingElement?0:scrollRoot?.getBoundingClientRect().top||0;
     let current=list[0];
     for(const h of list) {if(h.element.getBoundingClientRect().top<=rootTop+145)current=h;else break;}
+    const changed=activeHeading!==current?.id;
+    if(!rebuilt && !changed)return;
     activeHeading=current?.id;
+    let activeRow=null;
     for(const row of tree.querySelectorAll('.row')) {
       const selected=row.dataset.id===activeHeading;row.classList.toggle('active',selected);
-      const link=row.querySelector('.heading');if(selected)link.setAttribute('aria-current','location');else link.removeAttribute('aria-current');
+      const link=row.querySelector('.heading');
+      if(selected){activeRow=row;link.setAttribute('aria-current','location');}
+      else link.removeAttribute('aria-current');
     }
+    if(headings(active).length>=autoFoldThreshold) {
+      const preferences=outlinePreferences.get(active?.assistant?.id);
+      if(preferences?.expandedAll===undefined) {
+        for(const toggle of tree.querySelectorAll('.disclosure')) {
+          const row=toggle.parentElement;
+          if(!preferences?.branches.has(row.dataset.id))setBranchExpanded(toggle,row.parentElement.contains(activeRow),true);
+        }
+      }
+      // Scroll only the directory, leaving the reader's position in the answer alone.
+      if(activeRow && !toc.hidden && !tree.contains(shadow.activeElement) && !activeRow.closest('[hidden],[inert]')) {
+        const rowRect=activeRow.getBoundingClientRect(), treeRect=tree.getBoundingClientRect();
+        if(rowRect.top<treeRect.top)tree.scrollTop+=rowRect.top-treeRect.top;
+        else if(rowRect.bottom>treeRect.bottom)tree.scrollTop+=rowRect.bottom-treeRect.bottom;
+      }
+    }
+    if(rebuilt)updateFoldAll();
   }
   function render() {renderRail();renderTree();position();}
   function position() {
@@ -466,7 +504,7 @@
       // A SPA can update its URL while the old conversation is still mounted.
       // Do not mistake that old DOM for virtualized history of the new route.
       routeExclusions=new WeakMap(seenRouteMessages);seenRouteMessages=new Map();
-      currentKey=snapshot.key;store.reset(currentKey);active=null;folded.clear();
+      currentKey=snapshot.key;store.reset(currentKey);active=null;outlinePreferences.clear();
       manualClosed=false;userClosed=false;temporaryOpen=false;wasStreaming=false;treeSignature=railSignature=null;treeTurnId=null;cancelNavigation();
       nativePanel=null;panelTemporaryOpen=false;
       pendingDraftId=null;
@@ -490,6 +528,14 @@
     theme();updateActive();
   }
   function scheduleScan(){if(contextAlive()&&!timer)timer=setTimeout(refresh,180);}
+  function resumePage() {
+    if(!contextAlive()||document.hidden)return;
+    if(!host.isConnected)document.documentElement.append(host);
+    panelCandidatesDirty=true;
+    // A restored tab may have no route or DOM changes. Rescan immediately so a
+    // throttled background timer or a stale missing-main snapshot cannot hide us.
+    refresh();
+  }
   function scheduleAutoClose() {
     clearTimeout(closeTimer);
     if(settings.autoCollapse&&!temporaryOpen&&!hovering)closeTimer=setTimeout(()=>{
@@ -514,16 +560,20 @@
   preview.addEventListener('mouseleave',schedulePreviewHide);
   preview.addEventListener('focusout',schedulePreviewHide);
   $('.collapse').addEventListener('click',()=>{manualClosed=true;userClosed=true;temporaryOpen=false;panelTemporaryOpen=false;position();opener.focus({preventScroll:true});});
-  $('.fold-all').addEventListener('click',()=>{
-    const toggles=topLevelToggles();
-    const expand=toggles.every(toggle=>toggle.getAttribute('aria-expanded')==='false');
-    for(const toggle of toggles) {
-      const id=toggle.parentElement.dataset.id, children=toggle.parentElement.nextElementSibling;
-      if(expand)folded.delete(id);else folded.add(id);
-      toggle.setAttribute('aria-expanded',String(expand));toggle.title=expand?'收起子章节':'展开子章节';
-      setChildrenExpanded(children,expand);
+  foldAll.addEventListener('click',()=>{
+    if(!contextAlive()||foldAll.hidden||!active?.assistant)return;
+    const answerId=active.assistant.id;
+    const action=foldAll.dataset.action;
+    if(action==='restore') {
+      outlinePreferences.delete(answerId);
+      treeSignature=null;
+      renderTree();
+      return;
     }
-    updateFoldAll();highlightHeadings();
+    const expand=action==='expand';
+    outlinePreferences.set(answerId,{expandedAll:expand,branches:new Map()});
+    for(const toggle of tree.querySelectorAll('.disclosure'))setBranchExpanded(toggle,expand,true);
+    updateFoldAll();
   });
   opener.addEventListener('click',()=>{
     manualClosed=false;userClosed=false;temporaryOpen=true;panelTemporaryOpen=true;clearTimeout(closeTimer);position();$('.collapse').focus({preventScroll:true});
@@ -542,6 +592,9 @@
   },{passive:true});
   window.addEventListener('scroll',event=>{if(event.composedPath().includes(host))return;preview.hidden=true;schedulePosition();},{passive:true,capture:true,signal:lifecycle.signal});
   window.addEventListener('resize',()=>{scheduleScan();schedulePosition();},{passive:true,signal:lifecycle.signal});
+  document.addEventListener('visibilitychange',resumePage,{signal:lifecycle.signal});
+  window.addEventListener('pageshow',resumePage,{signal:lifecycle.signal});
+  window.addEventListener('focus',resumePage,{signal:lifecycle.signal});
   window.addEventListener('wheel',cancelNavigation,{passive:true,signal:lifecycle.signal});
   window.addEventListener('touchstart',cancelNavigation,{passive:true,signal:lifecycle.signal});
   window.addEventListener('keydown',e=>{
@@ -601,12 +654,14 @@
     if(needsScan)scheduleScan();
     if(needsLayout)scheduleLayout();
   });
-  domObserver.observe(document.documentElement,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class','style','hidden','inert','aria-hidden','role','data-d-component','data-d-has-border','data-d-tabular-nums','data-summary-panel-variant','data-chatgpt-conversation-selection-target','data-message-author-role','data-message-id','data-chatgpt-search-unit-key','data-chatgpt-search-message-ids','data-markdown-text-style','data-is-streaming','data-testid','data-thread-user-message-navigation-content']});
+  domObserver.observe(document.documentElement,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class','style','hidden','inert','aria-hidden','role','data-dil-response','data-d-component','data-d-has-border','data-d-size','data-d-tabular-nums','data-summary-panel-variant','data-chatgpt-conversation-selection-target','data-message-author-role','data-message-id','data-chatgpt-search-unit-key','data-chatgpt-search-message-ids','data-markdown-text-style','data-is-streaming','data-testid','data-thread-user-message-navigation-content']});
   themeObserver=new MutationObserver(()=>{if(contextAlive()){theme();scheduleLayout();}});
   themeObserver.observe(document.documentElement,{attributes:true,attributeFilter:['class','data-theme','style']});
   // popstate does not cover pushState from the isolated content-script world.
   window.addEventListener('popstate',()=>{explicitNavigation=true;refresh();},{signal:lifecycle.signal});
-  routeInterval=setInterval(()=>{if(contextAlive()&&adapter.getKey()!==currentKey)scheduleScan();},800);
+  routeInterval=setInterval(()=>{
+    if(contextAlive()&&(adapter.getKey()!==currentKey||(!document.hidden&&!snapshot?.main?.isConnected)))scheduleScan();
+  },800);
   if(hasStorage()) {
     try {
       chrome.storage.local.get(defaults).then(value=>{if(contextAlive()){settings={...defaults,...value};scheduleScan();}}).catch(()=>{contextAlive();});

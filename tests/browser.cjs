@@ -31,22 +31,31 @@ const assert=require('node:assert/strict');
  await root.locator('.heading').first().focus();await root.locator('.heading').first().press('Enter');
  await expect(root.locator('.heading').first()).toBeFocused();
  console.log('PASS 轮次预览、左右联动、章节高亮和树折叠');
- // The bulk control affects every top-level branch while preserving nested choices.
+ // One control cycles through expansion, collapse, and the default state.
  await page.evaluate(()=>{const body=document.querySelector('[data-message-id="a2"] .markdown');window.outlineTestOriginal=body.innerHTML;body.innerHTML='<h2>第一部分</h2><h3>第一子项</h3><h4>更深层</h4><h2>第二部分</h2><h3>第二子项</h3>';});
  await expect(root.locator('.heading')).toHaveCount(5);
- const bulk=root.locator('.fold-all'), topToggles=root.locator('.tree > .branch > .row > .disclosure');
- await expect(topToggles).toHaveCount(2);await expect(bulk).toHaveAttribute('aria-label','收起全部子目录');
- await root.locator('.tree > .branch').first().locator('.children .disclosure').first().click();
- await bulk.click();await expect(bulk).toHaveAttribute('aria-label','展开全部子目录');
- await expect(topToggles.nth(0)).toHaveAttribute('aria-expanded','false');await expect(topToggles.nth(1)).toHaveAttribute('aria-expanded','false');
- await page.evaluate(()=>document.querySelector('[data-message-id="a2"] .markdown').insertAdjacentHTML('beforeend','<h3>生成的新子项</h3>'));
- await expect(root.locator('.heading')).toHaveCount(6);await expect(bulk).toHaveAttribute('aria-label','展开全部子目录');
- await bulk.click();await expect(bulk).toHaveAttribute('aria-label','收起全部子目录');await expect(topToggles.nth(0)).toHaveAttribute('aria-expanded','true');await expect(topToggles.nth(1)).toHaveAttribute('aria-expanded','true');
- await expect(root.locator('.tree > .branch').first().locator('.children .disclosure').first()).toHaveAttribute('aria-expanded','false');
- await topToggles.nth(0).click();await topToggles.nth(1).click();await expect(bulk).toHaveAttribute('aria-label','展开全部子目录');
+ const bulk=root.locator('.fold-all'), visibleHeadings=root.locator('.heading:visible');
+ await expect(bulk).toHaveAttribute('aria-label','展开全部子目录');
+ await expect(bulk.locator('[data-icon="expand"]')).toBeVisible();
+ await root.getByRole('button',{name:'折叠或展开：第一子项',exact:true}).click();
+ await bulk.click();
+ await expect(visibleHeadings).toHaveText(['第一部分','第一子项','更深层','第二部分','第二子项']);
+ await expect(bulk).toHaveAttribute('aria-label','收起全部子目录');
+ await expect(bulk.locator('[data-icon="collapse"]')).toBeVisible();
+ await bulk.click();
+ await expect(visibleHeadings).toHaveText(['第一部分','第二部分']);
+ await expect(bulk).toHaveAttribute('aria-label','恢复初始状态');
+ await expect(bulk.locator('[data-icon="restore"]')).toBeVisible();
+ await page.evaluate(()=>document.querySelector('[data-message-id="a2"] .markdown').insertAdjacentHTML('beforeend','<h4>生成的新子项</h4>'));
+ await expect(root.locator('.heading')).toHaveCount(6);
+ await expect(root.locator('.disclosure[aria-expanded="true"]')).toHaveCount(0);
+ await bulk.click();
+ await expect(visibleHeadings).toHaveText(['第一部分','第一子项','更深层','第二部分','第二子项','生成的新子项']);
+ await expect(bulk).toHaveAttribute('aria-label','展开全部子目录');
+ await expect(bulk).toBeFocused();
  await page.evaluate(()=>document.querySelector('[data-message-id="a2"] .markdown').innerHTML=window.outlineTestOriginal);
  await expect(root.locator('.heading')).toHaveCount(7);
- console.log('PASS 第一层子目录批量收起、展开与流式更新');
+ console.log('PASS 短目录三步循环，流式新增分支沿用批量状态');
  // Scroll without a click updates the current turn after the navigation lock expires/cancels.
  await page.mouse.wheel(0,1);await page.evaluate(()=>document.querySelector('[data-message-id="u5"]').scrollIntoView());
  await expect(root.locator('.tick.active')).toHaveAttribute('data-id','u5');
@@ -356,8 +365,78 @@ const assert=require('node:assert/strict');
  await expect(outlineRoot.locator('.row.active .heading')).toHaveText('正文场景');
  await outlinePage.evaluate(()=>{document.querySelector('[data-message-id="a0"] .markdown').innerHTML='<div data-d-component="box" data-d-has-border><h2>只有卡片标题</h2></div>';window.scrollTo(0,0);});
  await expect(outlineRoot.locator('.heading')).toHaveCount(0);await expect(outlineToc).toBeHidden();
+ await outlinePage.evaluate(()=>{
+   const body=document.querySelector('[data-message-id="a0"] .markdown');
+   body.innerHTML=`<div data-dil-response><div data-d-component="row">封面标签</div>
+     <div data-d-component="box" data-d-has-border><h1 data-d-component="title" data-d-size="2xl">回答总标题</h1><p data-d-component="text">封面说明</p></div>
+     <div data-d-component="box"><img alt="产品图片"><h1 data-d-component="title">约 ¥2,999</h1></div>
+     <div data-d-component="grid"><div data-d-component="grid-item"><h1 data-d-component="title" data-d-tabular-nums="true">76g</h1></div></div>
+     <figure><h2>图片说明</h2></figure><h2 hidden>隐藏章节</h2>
+     ${Array.from({length:4},(_,index)=>{
+       const n=index+1;
+       return `<h2 data-d-component="title">章节 ${n}</h2><p style="height:260px">章节正文</p>
+         <h3 id="section-${n}">小标题 ${n}.1</h3><p style="height:300px">小标题正文</p>
+         ${n===1?'':`<h3>小标题 ${n}.2</h3><p style="height:300px">小标题正文</p>`}`;
+     }).join('')}
+     <div data-d-component="box" data-d-has-border><h1 data-d-component="title" data-d-size="2xl">组合卡片标题</h1></div></div>`;
+   window.scrollTo(0,0);
+ });
+ const richHeadings=outlineRoot.locator('.heading');
+ await expect(richHeadings).toHaveText(['回答总标题','章节 1','小标题 1.1','章节 2','小标题 2.1','小标题 2.2','章节 3','小标题 3.1','小标题 3.2','章节 4','小标题 4.1','小标题 4.2']);
+ const firstChild=richHeadings.filter({hasText:'小标题 1.1'});
+ const secondChild=richHeadings.filter({hasText:'小标题 2.1'});
+ const firstToggle=outlineRoot.getByRole('button',{name:'折叠或展开：章节 1',exact:true});
+ const scrollToSection=n=>outlinePage.evaluate(index=>{
+   const top=document.getElementById(`section-${index}`).getBoundingClientRect().top;
+   window.scrollBy(0,top-100);
+ },n);
+ await expect(firstToggle).toHaveAttribute('aria-expanded','false');
+ await expect(firstChild).toBeHidden();
+ await scrollToSection(1);
+ await expect(firstChild).toBeVisible();
+ await expect(firstChild).toHaveAttribute('aria-current','location');
+ await firstChild.focus();
+ await scrollToSection(2);
+ await expect(secondChild).toHaveAttribute('aria-current','location');
+ await expect(secondChild).toBeVisible();
+ await expect(firstChild).toBeHidden();
+ await expect(firstToggle).toBeFocused();
+ await firstToggle.click();
+ await scrollToSection(3);
+ await expect(firstChild).toBeVisible();
+ await expect(secondChild).toBeHidden();
+ await outlinePage.evaluate(()=>{
+   document.querySelector('[data-dil-response]').insertAdjacentHTML('beforeend','<h3>流式新增小标题</h3>');
+ });
+ await expect(richHeadings.last()).toHaveText('流式新增小标题');
+ await expect(richHeadings.last()).toBeHidden();
+ await expect(firstChild).toBeVisible();
+ const richBulk=outlineRoot.locator('.fold-all');
+ await expect(richBulk).toHaveAttribute('aria-label','展开全部子目录');
+ await richBulk.click();
+ await expect(outlineRoot.locator('.heading:visible')).toHaveCount(13);
+ await scrollToSection(4);
+ await expect(richHeadings.filter({hasText:'小标题 4.1'})).toHaveAttribute('aria-current','location');
+ await expect(outlineRoot.locator('.heading:visible')).toHaveCount(13);
+ await outlinePage.evaluate(()=>{
+   document.querySelector('[data-dil-response]').insertAdjacentHTML('beforeend','<h4>流式新增深层标题</h4>');
+ });
+ await expect(richHeadings.last()).toHaveText('流式新增深层标题');
+ await expect(outlineRoot.locator('.heading:visible')).toHaveCount(14);
+ await richBulk.click();
+ await expect(outlineRoot.locator('.heading:visible')).toHaveText(['回答总标题']);
+ await expect(richBulk).toHaveAttribute('aria-label','恢复初始状态');
+ await richBulk.click();
+ await expect(richBulk).toHaveAttribute('aria-label','展开全部子目录');
+ const fourthChild=richHeadings.filter({hasText:'小标题 4.1'});
+ await expect(fourthChild).toBeVisible();
+ await expect(firstChild).toBeHidden();
+ await scrollToSection(1);
+ await expect(firstChild).toBeVisible();
+ await expect(fourthChild).toBeHidden();
+ console.log('PASS 富文本图卡和规格标题过滤，长目录跟随滚动展开并保留手动状态');
  await outlinePage.evaluate(()=>{document.querySelector('[data-message-id="a0"] .markdown').innerHTML='<h2>短标题</h2><p>正常正文</p>';window.scrollTo(0,0);});
- await expect(outlineRoot.locator('.heading')).toHaveText('短标题');await expect(outlineToc).toBeVisible();
+ await expect(outlineRoot.locator('.heading')).toHaveText(['短标题']);await expect(outlineToc).toBeVisible();
  const shortWidth=await outlineToc.evaluate(el=>el.getBoundingClientRect().width);
  const longTitle='这是一个明显超出原来两百像素目录宽度的长标题，用于检查完整名称和自适应宽度。'.repeat(5);
  await outlinePage.evaluate(title=>{document.querySelector('[data-message-id="a0"] .markdown').innerHTML='<h2></h2><p>正常正文</p>';document.querySelector('[data-message-id="a0"] h2').textContent=title;window.scrollTo(0,0);},longTitle);

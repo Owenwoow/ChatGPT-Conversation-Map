@@ -29,11 +29,17 @@
       if (snapshot.key !== this.key) this.reset(snapshot.key);
       const incoming = snapshot.messages || [];
       for (let index = 0; index < incoming.length; index++) {
-        const message = incoming[index];
+        let message = incoming[index];
         // A regenerated/edited message occupies the same page turn slot. Replace
         // the old branch in place instead of leaving a duplicate cached answer.
         const previousId = message.slotId && this.slots.get(message.slotId);
         const oldMessage = this.messages.get(message.id);
+        // Recovery/virtualization can leave a known message container empty.
+        // Absence of content is not an edit or a reason to erase its outline.
+        // Still accept new IDs and explicit streaming updates, including empty ones.
+        if (oldMessage?.text && !message.text && !message.headings?.length && !message.streaming) {
+          message = { ...message, text: oldMessage.text, headings: oldMessage.headings };
+        }
         const userEdited = message.role === 'user' && oldMessage && oldMessage.text !== message.text;
         if ((previousId && previousId !== message.id) || userEdited) {
           const replacedId = previousId || message.id;

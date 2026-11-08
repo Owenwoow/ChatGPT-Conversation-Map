@@ -33,6 +33,7 @@ function setup({value = true, get, storageAvailable = true} = {}) {
     closest: selector => selector === '.message' ? message : null,
     matches: () => true,
     querySelector: () => null,
+    querySelectorAll: () => [],
     getBoundingClientRect: () => ({width: 240, height: 120, left: 100, right: 340, top: 100, bottom: 220})
   });
   const chrome = {

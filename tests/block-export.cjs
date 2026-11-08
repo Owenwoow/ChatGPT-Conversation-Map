@@ -122,6 +122,95 @@ async function blockExportScenario(page,popup) {
   await page.screenshot({path:path.resolve(__dirname,'../artifacts/block-export-ui.png')});
   console.log('PASS 新版 search-unit 结构、深浅色与窄屏入口定位');
 
+  await page.keyboard.press('Escape');
+  await page.route('https://images.example.test/**', route=>route.fulfill({
+   contentType:'image/svg+xml', body:'<svg xmlns="http://www.w3.org/2000/svg" width="20" height="16"><rect width="20" height="16"/></svg>'
+  }));
+  await page.evaluate(()=>{
+   document.querySelector('[data-markdown-text-style="assistant-message"]').insertAdjacentHTML('beforeend',`<div data-dil-response>
+    <div id="products" data-d-component="grid" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+     <div data-d-component="box" data-d-has-border>
+      <div data-d-component="image"><img src="https://images.example.test/coffee.svg" alt="咖啡 &amp; 牛奶" style="aspect-ratio:5/4;width:100%" onload="void 0">
+       <button id="image-trigger" data-d-component="pressable">打开图片</button><div data-saved><button>收藏图片</button></div>
+      </div><p>咖啡 ¥28</p>
+     </div>
+     <div data-d-component="box" data-d-has-border><img src="https://images.example.test/cake.svg" alt="甜点"><p>甜点 ¥32</p></div>
+    </div>
+    <div id="chart-download" data-d-component="box" data-d-has-border style="padding:24px"><p>带原生下载的图表</p><div data-chart-widget-download-exclude hidden></div></div>
+    <div id="link-download" data-d-component="box" data-d-has-border style="padding:24px"><p>带下载链接的卡片</p><a href="/sample.csv" download>下载数据</a></div>
+    <div id="plan-card" data-d-component="box" data-d-has-border style="display:flex;flex-direction:column;gap:8px;border:1px solid;padding:12px">
+     <p><strong>计划记录</strong></p>
+     <div id="plan-grid" data-d-component="grid" style="display:grid;grid-template-columns:1fr 1fr;padding:12px">
+      <div><p>已完成 30 项</p><p>每日 30 分钟</p></div><div><p>周期 45 天</p><p>截止 12 月 20 日</p></div>
+     </div>
+     <span>备注：来源见附件 <span data-d-component="popover-trigger" data-d-inline data-d-inline-text role="button" aria-haspopup="dialog" tabindex="0"><span>plan.json</span></span></span>
+    </div>
+    <p>外部说明不应被复制</p>
+    <div id="custom-control-card" data-d-component="box" data-d-has-border style="padding:24px"><p>交互卡片</p><span role="button" tabindex="0">切换计划</span></div>
+   </div>`);
+  });
+  await page.locator('#image-trigger').hover();await expect(copy).toBeVisible();
+  await copy.click();await expect(copy).toHaveAttribute('data-state','success');
+  const products=await page.evaluate(()=>navigator.clipboard.readText());
+  assert.match(products,/src="https:\/\/images\.example\.test\/coffee\.svg" alt="咖啡 &amp; 牛奶"/);
+  assert.match(products,/src="https:\/\/images\.example\.test\/cake\.svg"/);
+  assert.match(products,/aspect-ratio:5 \/ 4/);
+  assert(products.includes('咖啡 ¥28')&&products.includes('甜点 ¥32'));
+  assert(!/<button|onload=|收藏图片|打开图片|带原生下载的图表/.test(products));
+  for(const id of ['chart-download','link-download']) {
+   await page.locator(`#${id} p`).hover();await expect(host).toBeHidden();
+  }
+  console.log('PASS 商品图文整组 HTML 复制，过滤图片控件及已有官方下载的组件');
+
+  await page.locator('#plan-grid p').first().hover();await expect(copy).toBeVisible();
+  const planBounds=await page.locator('#plan-card').boundingBox();
+  const planCopyBounds=await copy.boundingBox();
+  assert(Math.abs(planCopyBounds.y-planBounds.y-8)<1,'复制按钮应锚定外框顶部');
+  assert(Math.abs(planBounds.x+planBounds.width-planCopyBounds.x-planCopyBounds.width-8)<1,'复制按钮应锚定外框右侧');
+  await copy.click();await expect(copy).toHaveAttribute('data-state','success');
+  const plan=await page.evaluate(()=>navigator.clipboard.readText());
+  for(const text of ['计划记录','已完成 30 项','周期 45 天','备注：来源见附件','plan.json'])assert(plan.includes(text));
+  assert(!/外部说明不应被复制|role=|aria-haspopup=|tabindex=/.test(plan));
+  await page.locator('#custom-control-card p').hover();await expect(host).toBeHidden();
+  console.log('PASS 含行内附件的卡片整框复制，按钮锚定外框右上角');
+
+  await page.evaluate(()=>{
+   const response=document.querySelector('[data-dil-response]');
+   response.insertAdjacentHTML('beforeend',`<div id="study-card" data-d-component="box" data-d-has-border style="display:flex;flex-direction:column;border:1px solid;padding:12px;gap:12px">
+    <div style="display:flex;align-items:center;gap:12px">
+     <div data-d-has-width data-d-has-height style="display:flex;align-items:center;justify-content:center;width:48px;height:48px;flex-shrink:0;border-radius:12px;background-color:#e8f1ff">
+      <svg width="20" height="20" viewBox="0 0 20 20"><path d="M3 3h14v14H3z" fill="#2673c9"/></svg>
+     </div>
+     <div style="flex:1 1 0%;min-width:0"><p style="margin:0">单词：每天都做</p><p style="margin:0">记忆基础，解决认识和理解词汇的问题。</p></div>
+     <strong style="white-space:nowrap">15–20m</strong>
+    </div>
+    <div data-d-component="divider" style="--divider-size:1px;height:var(--divider-size);padding:8px 0;box-sizing:content-box;background-color:#333;background-clip:content-box"></div>
+    <div style="display:flex;align-items:center;gap:12px">
+     <div data-d-has-width data-d-has-height style="--icon-size:48px;display:grid;place-content:center;width:var(--icon-size);height:var(--icon-size);flex-shrink:0;border-radius:12px;background-color:#eaf5ec">读</div>
+     <p style="margin:0">阅读：每周 2–3 次</p>
+    </div>
+   </div>`);
+  });
+  await page.locator('#study-card p').first().hover();await expect(copy).toBeVisible();
+  await copy.click();await expect(copy).toHaveAttribute('data-state','success');
+  const study=await page.evaluate(()=>navigator.clipboard.readText());
+  const note=await page.context().newPage();
+  try {
+   await note.setContent(`<!doctype html><meta charset="utf-8"><style>body{margin:0;font:20px/1.8 system-ui}</style><main style="width:600px">${study}</main>`);
+   for(const width of [600,320]) {
+    await note.locator('main').evaluate((el,width)=>el.style.width=`${width}px`,width);
+    const layout=await note.locator('main > div').evaluate(card=>{
+     const [words,divider,reading]=card.children;
+     const size=el=>[el.offsetWidth,el.offsetHeight];
+     const style=getComputedStyle(divider);
+     return {cardWidth:card.offsetWidth,rowWidth:words.offsetWidth,icons:[size(words.firstElementChild),size(reading.firstElementChild)],
+      lineWidth:divider.offsetWidth,lineHeight:style.height,lineBoxHeight:divider.offsetHeight,lineClip:style.backgroundClip};
+    });
+    assert.deepEqual(layout,{cardWidth:width,rowWidth:width-26,icons:[[48,48],[48,48]],lineWidth:width-26,lineHeight:'1px',lineBoxHeight:17,lineClip:'content-box'});
+   }
+  } finally {await note.close();}
+  console.log('PASS 导出后图标保持固定尺寸，分隔线留白透明，卡片宽度随阅读容器变化');
+
   if (popup) {
    const readyPopup=await require('./context-reload-scenario.cjs').reloadExtension(page,popup);
    await expect(host).toHaveCount(0);
@@ -138,7 +227,8 @@ module.exports=blockExportScenario;
 if (require.main===module) (async()=>{
  const browser=await chromium.launch({headless:true});
  try {
-  const page=await browser.newPage({viewport:{width:1600,height:1000},reducedMotion:'reduce'});
+  const context=await browser.newContext({viewport:{width:1600,height:1000},reducedMotion:'reduce'});
+  const page=await context.newPage();
   await page.route('https://chatgpt.com/**',route=>route.fulfill({path:path.join(__dirname,'fixture.html'),contentType:'text/html'}));
   const sources=await Promise.all(['adapter','block-export'].map(name=>fs.readFile(path.resolve(__dirname,`../src/${name}.js`),'utf8')));
   await page.addInitScript({content:`document.addEventListener('DOMContentLoaded', () => {\n${sources.join('\n')}\n}, {once:true});`});

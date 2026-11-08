@@ -5,14 +5,21 @@
   const lifecycle = new AbortController();
   const options = {signal:lifecycle.signal};
   const hidden = '[hidden],[inert],[aria-hidden="true"]';
-  const excluded = 'pre,code,textarea,input,select,button,[contenteditable="true"]';
-  const unsupported = 'input,textarea,select,button,[contenteditable="true"],iframe,canvas,img,video,audio,object,embed';
+  const imageComponent = '[data-d-component="image"]';
+  const imageTrigger = `${imageComponent} button[data-d-component="pressable"]`;
+  const imageControls = `${imageTrigger},${imageComponent} [data-saved] button`;
+  // File references are inline text chips. The serializer retains their label
+  // and appearance without exporting the popover behavior.
+  const inlineReference = 'span[data-d-component="popover-trigger"][data-d-inline][data-d-inline-text][aria-haspopup="dialog"]';
+  const excluded = `pre,code,textarea,input,select,button:not(${imageTrigger}),[contenteditable="true"]`;
+  const nativeExport = '[data-chart-widget-download-exclude],a[download],button:is([data-testid*="download" i],[aria-label^="Download" i],[aria-label^="下载"],[title^="Download" i],[title^="下载"])';
+  const unsupported = `input,textarea,select,button:not(${imageControls}),[role="button"]:not(${inlineReference}),[role="radio"],[role="tab"],[contenteditable="true"],iframe,canvas,video,audio,object,embed,${nativeExport}`;
   const blocks = '[data-d-component="box"],[data-d-component="grid"]';
-  const htmlTags = new Set('div p span strong b em i small br hr ul ol li h1 h2 h3 h4 h5 h6 table thead tbody tfoot tr th td blockquote code pre a'.split(' '));
+  const htmlTags = new Set('div p span strong b em i small br hr ul ol li h1 h2 h3 h4 h5 h6 table thead tbody tfoot tr th td blockquote code pre a img figure figcaption'.split(' '));
   const svgTags = new Set('svg g path rect circle ellipse line polyline polygon text tspan title'.split(' '));
-  const dropTags = new Set('script style template noscript iframe object embed form input textarea select button canvas video audio img'.split(' '));
+  const dropTags = new Set('script style template noscript iframe object embed form input textarea select button canvas video audio'.split(' '));
   const svgAttributes = ['viewBox','width','height','d','points','x','y','x1','y1','x2','y2','cx','cy','r','rx','ry','dx','dy','transform','fill-rule','clip-rule','stroke-linecap','stroke-linejoin','stroke-width'];
-  const cssProperties = ['display','box-sizing','flex-direction','flex-wrap','flex-grow','flex-shrink','align-items','align-self','justify-content','gap','grid-template-columns','grid-column','grid-row','padding','margin','border','border-radius','background-color','color','font-family','font-size','font-weight','font-style','line-height','text-align','text-decoration-line','white-space','overflow-wrap','vertical-align','list-style-type','border-collapse','border-spacing','fill','stroke','stroke-width'];
+  const cssProperties = ['display','box-sizing','width','height','min-width','min-height','max-width','max-height','flex-direction','flex-wrap','flex-grow','flex-shrink','flex-basis','align-items','align-self','justify-content','gap','grid-template-columns','grid-column','grid-row','padding','margin','border','border-radius','background-color','background-clip','color','font-family','font-size','font-weight','font-style','line-height','text-align','text-decoration-line','white-space','overflow','overflow-wrap','aspect-ratio','object-fit','object-position','vertical-align','list-style-type','border-collapse','border-spacing','fill','stroke','stroke-width'];
   const host = document.createElement('div');
   host.id = 'dual-nav-export-host';
   host.hidden = true;
@@ -22,7 +29,7 @@
     *{box-sizing:border-box}.copy{position:fixed;display:grid;place-items:center;width:30px;height:30px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--be-text,#888);opacity:.65;cursor:pointer;pointer-events:auto;transition:background-color 140ms ease,color 140ms ease,opacity 140ms ease}.copy:hover,.copy:focus-visible{background:var(--be-hover,#0000000c);color:var(--be-hover-text,#333);opacity:1}.copy:focus-visible{outline:2px solid #6b9ce6;outline-offset:2px}.copy[data-state=success],.copy[data-state=error]{opacity:1}.copy[aria-busy=true]{cursor:progress;opacity:.45}
     .copy svg{display:block;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.copy .check-icon{display:none}.copy[data-state=success] .copy-icon{display:none}.copy[data-state=success] .check-icon{display:block;color:#4ade80}.copy[data-state=error]{color:#ef4444}.status{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
     @media(prefers-reduced-motion:reduce){.copy{transition:none}}
-  </style><button class="copy" type="button" data-state="idle" aria-label="复制图块到 Obsidian"><svg class="copy-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"></rect><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"></path></svg><svg class="check-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"></path></svg><span class="status" aria-live="polite"></span></button>`;
+  </style><button class="copy" type="button" data-state="idle" aria-label="复制图块 HTML"><svg class="copy-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"></rect><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"></path></svg><svg class="check-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"></path></svg><span class="status" aria-live="polite"></span></button>`;
   document.documentElement.append(host);
   const copy = shadow.querySelector('.copy'), status = shadow.querySelector('.status');
   let current = null, route = adapter.getKey(), frame = 0, hideTimer = 0, feedbackTimer = 0, disposed = false, keyboardFocus = false, copying = false;
@@ -42,7 +49,7 @@
     return false;
   }
   function resetFeedback() {
-    copy.dataset.state = 'idle'; copy.setAttribute('aria-label','复制图块到 Obsidian'); status.textContent = '';
+    copy.dataset.state = 'idle'; copy.setAttribute('aria-label','复制图块 HTML'); status.textContent = '';
   }
   function hide() {
     clearTimeout(hideTimer); clearTimeout(feedbackTimer); resizeObserver.disconnect();
@@ -73,6 +80,17 @@
     const [r,g,b] = context.getImageData(0,0,1,1).data;
     return `rgb(${r},${g},${b})`;
   }
+  function imageUrl(image) {
+    const src = image.currentSrc || image.getAttribute('src');
+    if (!src) return null;
+    try {
+      const url = new URL(src, location.href);
+      return url.protocol === 'https:' && !url.username && !url.password ? url.href : null;
+    } catch {return null;}
+  }
+  function canExport(block) {
+    return !block.querySelector(unsupported) && Array.from(block.querySelectorAll('img')).every(imageUrl);
+  }
   function findBlock(target) {
     if (!(target instanceof Element) || target.closest(`${excluded},${hidden}`)) return null;
     const message = target.closest(adapter.selectors.message);
@@ -82,7 +100,7 @@
     const body = message.querySelector(adapter.selectors.body) || message;
     let candidate = null;
     for (let node = target; node && node !== body && body.contains(node); node = node.parentElement) {
-      if (!node.matches(blocks) || node.querySelector(unsupported) || !node.textContent.trim()) continue;
+      if (!node.matches(blocks) || !node.textContent.trim() || !canExport(node)) continue;
       const rect = node.getBoundingClientRect(), style = getComputedStyle(node);
       if (rect.width < 160 || rect.height < 48 || style.visibility !== 'visible') continue;
       if (node.matches('[data-d-component="grid"],[data-d-has-border]') || !['transparent','rgba(0, 0, 0, 0)'].includes(style.backgroundColor)) candidate = node;
@@ -119,6 +137,9 @@
   function escape(value) {
     return String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/\r/g,'&#13;').replace(/\n/g,'&#10;');
   }
+  function portableStyle(value) {
+    return value && !/url\s*\(|expression\s*\(|@import|var\s*\(/i.test(value);
+  }
   function exportBlock(block) {
     let count = 0;
     function serialize(node) {
@@ -129,24 +150,42 @@
       if (dropTags.has(tag) || node.matches(hidden)) return '';
       const style = getComputedStyle(node);
       if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse' || style.opacity === '0') return '';
+      // The image widget also contains gallery controls and overlay layout.
+      if (node.matches(imageComponent)) {
+        const image = node.querySelector('img');
+        return image ? serialize(image) : '';
+      }
+      const src = tag === 'img' ? imageUrl(node) : null;
+      if (tag === 'img' && !src) return '';
       // The site's down-arrow icon becomes editable text, without an SVG dependency.
       if (tag === 'svg' && node.getAttribute('data-d-component') === 'icon' && node.querySelector('path')?.getAttribute('d')?.startsWith('M12.707 18.707')) {
         return `<span style="display:block;height:16px;font-size:16px;line-height:16px;color:${escape(style.color)};">↓</span>`;
       }
       const content = Array.from(node.childNodes,serialize).join('');
       if (!htmlTags.has(tag) && !svgTags.has(tag)) return content;
+      let dividerThickness = null;
+      if (node.matches('hr,[data-d-component="divider"]')) {
+        dividerThickness = tag === 'hr' || parseFloat(style.height) <= parseFloat(style.width) ? 'height' : 'width';
+      }
       const declarations = [];
       for (const property of cssProperties) {
         let value = style.getPropertyValue(property);
-        if (property === 'grid-template-columns' && value !== 'none') {
+        if (property === 'width' || property === 'height') {
+          // Preserve authored sizes and divider thickness without freezing stretch sizes.
+          const declared = node.style.getPropertyValue(property);
+          if (portableStyle(declared)) value = declared;
+          else if (property !== dividerThickness && !node.hasAttribute(`data-d-has-${property}`)) continue;
+        } else if (property === 'grid-template-columns' && value !== 'none') {
           // Keep equal columns responsive instead of freezing their computed pixel widths.
           const declared = node.style.gridTemplateColumns;
-          if (declared && !/var\(|url\(/i.test(declared)) value = declared;
+          if (portableStyle(declared)) value = declared;
         }
-        if (value && !/url\s*\(|expression\s*\(|@import|var\s*\(/i.test(value)) declarations.push(`${property}:${value}`);
+        if (portableStyle(value)) declarations.push(`${property}:${value}`);
       }
       if (node === block) declarations.push(`width:100%;margin:0;background-color:${opaqueBackground(block)};box-sizing:border-box`);
+      if (src) declarations.push('display:block','width:100%','height:auto');
       let attributes = ` style="${escape(declarations.join(';'))}"`;
+      if (src) return `<img${attributes} src="${escape(src)}" alt="${escape(node.getAttribute('alt') || '')}">`;
       if (tag === 'a') {
         try {
           const href = node.getAttribute('href');
@@ -178,7 +217,7 @@
     feedbackTimer = setTimeout(resetFeedback,1400);
   }
   function validTarget() {
-    if (!alive() || !enabled || !current?.isConnected || route !== adapter.getKey() || current.closest(hidden)) {hide(); return null;}
+    if (!alive() || !enabled || !current?.isConnected || route !== adapter.getKey() || current.closest(hidden) || !canExport(current)) {hide(); return null;}
     return current;
   }
   async function writeClipboard(text) {
