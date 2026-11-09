@@ -24,8 +24,6 @@
 | What you want to do | How Conversation Map helps |
 | --- | --- |
 | Find an earlier question and answer. | The **conversation minimap** displays one tick per turn. Hover or focus a tick to preview an excerpt, then click to jump. Scroll the minimap in long chats. |
-| Pull scattered ideas back together. | The **conversation notebook** lets you place turns, excerpts, and notes on a separate canvas. Move cards, group them by topic, and return to the starting question. |
-| Follow up on several passages at once. | **Selection annotations** collect excerpts and your questions in a compact queue. Merge the batch into your draft when ready to send. |
 | Return to an important turn later. | Add or remove **bookmarks** in the preview. Bookmarks for saved conversations stay on your device and survive page reloads. |
 | Read a specific section of a long answer. | The **hierarchical answer outline** recognizes H1–H6 headings, supports section jumps, highlights the current heading, and lets you expand or collapse branches individually or all at once. |
 | Follow an answer as it is generated. | **Live updates** add headings during generation. Scrolling keeps the current turn and heading in sync; selecting another turn switches its outline. |
@@ -71,16 +69,6 @@ The minimap needs **at least two turns** and enough page content to scroll. Hove
 - **Long bright tick:** the current turn. A gold dot appears alongside it when that turn is also bookmarked.
 - Bookmarks require a saved conversation and stable turn identifiers. Temporary chats cannot currently be bookmarked.
 
-### Organize a conversation in the notebook
-
-Open **Notebook** from the extension toolbar while viewing a saved chat. Drag turns and excerpts from the sidebar onto the canvas, or use their **＋** buttons. Move cards freely or drop them into topic frames. Select a card to edit notes, connect it to another card, set it as the starting point, or open the source.
-
-The notebook saves locally and can be reopened from the toolbar after closing the chat. Earlier mind map links are available in the notebook.
-
-### Collect selection annotations
-
-Select text in a chat, write your question beside the selection, and confirm. Open the count beside the composer to review, edit, or remove queued annotations. When ready, choose **合并到输入框** to append the excerpts and questions to the current draft, then use ChatGPT's Send button. Annotations included in a confirmed message leave the queue.
-
 ### Browse answer sections
 
 The outline appears only when the answer contains headings. Click a heading to jump to it, or its arrow to collapse or expand its subtree. Hover a long heading to see its full text. The toolbar button cycles through expanding all branches, collapsing them to the outermost headings, and restoring the default behavior. Its icon and tooltip show the next action. Short outlines open fully, and long outlines expand as you scroll.
@@ -102,8 +90,8 @@ Block copying preserves text and HTTPS image links in static cards and grids. Co
 | Data or permission | Purpose and storage |
 | --- | --- |
 | `https://chatgpt.com/*` | The extension runs only on this site and reads loaded questions, answers, and headings to build navigation. |
-| `storage` | Saves settings, bookmarks, notebooks, and queued annotations locally. Turn titles, excerpts, and notes you add to a notebook are saved with the canvas. |
-| Other chat text, headings, and turn history | Processed in the current tab's memory. |
+| `storage` | Saves settings and bookmarks locally. Bookmarks contain conversation and turn identifiers, not chat text. |
+| Chat text, headings, and turn history | Kept only in the current tab's memory and discarded on reload. |
 
 The extension does not request external services, generate AI summaries, or access private ChatGPT APIs. Its interface uses Shadow DOM, and chat text is rendered through `textContent`. There are no runtime dependencies or remote scripts.
 

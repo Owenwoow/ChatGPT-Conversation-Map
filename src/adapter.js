@@ -126,13 +126,12 @@
       const turn = element.closest(SELECTORS.turn);
       const turnId = turn?.getAttribute('data-turn-id') || turn?.getAttribute('data-testid') || turn?.getAttribute('data-content-search-turn-key') || turn?.getAttribute('data-turn-key') || turn?.id;
       const slotId = unitMatch ? unitKey : turnId ? `${turnId}:${role}` : null;
-      const stableId = element.getAttribute('data-message-id') || element.getAttribute('data-chatgpt-search-message-ids')?.trim().split(/\s+/)[0];
-      const id = stableId || slotId || anonymousId(element);
+      const id = element.getAttribute('data-message-id') || element.getAttribute('data-chatgpt-search-message-ids')?.trim().split(/\s+/)[0] || (slotId || anonymousId(element));
       const body = element.querySelector(role === 'assistant' ? SELECTORS.body : SELECTORS.userBody) || element;
       const turnMatch = turn?.getAttribute('data-testid')?.match(/^conversation-turn-(\d+)$/);
       const unitOrder = unitKey?.match(/^fallback-turn-(\d+):(\d+):(user|assistant)$/);
       messages.push({
-        id, stableId, slotId, role, element, body,
+        id, slotId, role, element,
         order: turnMatch ? Number(turnMatch[1]) : unitOrder ? Number(unitOrder[1]) * 1000 + Number(unitOrder[2]) : null,
         text: (body.textContent || '').replace(/\s+/g, ' ').trim(),
         headings: role === 'assistant' ? headingRecords(body, id) : [],

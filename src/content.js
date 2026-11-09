@@ -52,9 +52,6 @@
   const rail = $('.rail'), toc = $('.toc'), tree = $('.tree'), preview = $('.preview'), opener = $('.open');
   const foldAll = $('.fold-all');
   const bookmarkButton = $('.bookmark-toggle');
-  const notebookSource = {signal:lifecycle.signal, getTurns:()=>turns, getSnapshot:()=>snapshot, navigate, notify};
-  const notebook = globalThis.DualNav.createNotebookBridge?.(notebookSource);
-  const annotations = globalThis.DualNav.createAnnotations?.({...notebookSource, shadow, hasStorage});
   function dispose() {
     if(disposed)return;
     disposed=true;lifecycle.abort();domObserver?.disconnect();themeObserver?.disconnect();layoutObserver.disconnect();
@@ -374,7 +371,6 @@
   }
   function render() {renderRail();renderTree();position();}
   function position() {
-    annotations?.position();
     if(!snapshot?.main?.isConnected){rail.hidden=opener.hidden=preview.hidden=true;setTocVisible(false,true);return;}
     const area=adapter.getContentRect(snapshot.main);
     if(!area || !Number.isFinite(area.left))return;
@@ -529,8 +525,6 @@
     if(snapshot.streaming&&!wasStreaming&&settings.autoExpand&&!userClosed){manualClosed=false;}
     wasStreaming=snapshot.streaming;
     if(active)active=turns.find(t=>t.id===active.id)||null;
-    notebook?.refresh();
-    annotations?.refresh();
     theme();updateActive();
   }
   function scheduleScan(){if(contextAlive()&&!timer)timer=setTimeout(refresh,180);}
@@ -604,7 +598,6 @@
   window.addEventListener('wheel',cancelNavigation,{passive:true,signal:lifecycle.signal});
   window.addEventListener('touchstart',cancelNavigation,{passive:true,signal:lifecycle.signal});
   window.addEventListener('keydown',e=>{
-    if(annotations?.ownsFocus())return;
     if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&adapter.isComposer(e.target)){draftSendAt=Date.now();explicitNavigation=false;noteSend();}
     if(['PageDown','PageUp','ArrowDown','ArrowUp','Home','End'].includes(e.key))cancelNavigation();
     if(e.key==='Escape'){
@@ -672,7 +665,7 @@
   if(hasStorage()) {
     try {
       chrome.storage.local.get(defaults).then(value=>{if(contextAlive()){settings={...defaults,...value};scheduleScan();}}).catch(()=>{contextAlive();});
-      chrome.storage.onChanged.addListener((changes,area)=>{if(!contextAlive()||area!=='local')return;for(const key of Object.keys(defaults))if(changes[key])settings[key]=changes[key].newValue??defaults[key];if(!settings.immersiveMode)cancelImmersive();if(Object.keys(changes).some(key=>key.startsWith(bookmarkPrefix(currentKey))))loadBookmarks(currentKey);annotations?.storageChanged(changes);scheduleScan();});
+      chrome.storage.onChanged.addListener((changes,area)=>{if(!contextAlive()||area!=='local')return;for(const key of Object.keys(defaults))if(changes[key])settings[key]=changes[key].newValue??defaults[key];if(!settings.immersiveMode)cancelImmersive();if(Object.keys(changes).some(key=>key.startsWith(bookmarkPrefix(currentKey))))loadBookmarks(currentKey);scheduleScan();});
     } catch(error) {if(contextAlive())throw error;}
   }
   refresh();

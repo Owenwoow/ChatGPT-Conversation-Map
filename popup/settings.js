@@ -5,8 +5,6 @@
       pageTitle: 'ChatGPT Conversation Map · Settings',
       appName: 'Conversation Map',
       tagline: 'Find your way through long conversations.',
-      recentMapsTitle: 'Notebook',
-      openNotebook: 'Open notebook',
       navigationTitle: 'Navigation',
       leftLabel: 'Conversation map',
       leftHint: 'Jump between turns on the left.',
@@ -40,8 +38,6 @@
       pageTitle: 'ChatGPT 对话地图 · 设置',
       appName: '对话地图',
       tagline: '长对话，也能轻松找到方向。',
-      recentMapsTitle: '笔记本',
-      openNotebook: '打开笔记本',
       navigationTitle: '导航显示',
       leftLabel: '对话小地图',
       leftHint: '在页面左侧定位历史提问',
@@ -142,44 +138,5 @@
     }
   }
 
-  async function loadRecentMaps() {
-    const model = globalThis.DualNav?.notebookModel;
-    if (!model) return;
-    const opener = document.getElementById('openNotebook');
-    opener.addEventListener('click', async event => {
-      event.preventDefault();
-      const url = new URL(opener.href);
-      try {
-        const [tab] = await chrome.tabs.query({active:true, currentWindow:true});
-        if (tab?.id != null) {
-          const source = await chrome.tabs.sendMessage(tab.id, {type:'dualNavNotebookSource'});
-          if (source?.route) {
-            url.searchParams.set('route', source.route);
-            url.searchParams.set('tab', tab.id);
-          }
-        }
-      } catch {}
-      await chrome.tabs.create({url:url.href});
-    });
-    const links = document.getElementById('recentMapLinks');
-    try {
-      const maps = model.recentBoards(await chrome.storage.local.get(null)).slice(0, 5);
-      const formatter = new Intl.DateTimeFormat(document.documentElement.lang, {dateStyle:'medium', timeStyle:'short'});
-      links.replaceChildren(...maps.map(({route, updatedAt, title}) => {
-        const link = document.createElement('a');
-        link.className = 'setting recent-map';
-        link.href = 'notebook.html?route=' + encodeURIComponent(route);
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-        link.textContent = title || formatter.format(updatedAt) + ' · ' + route.slice(-8);
-        return link;
-      }));
-      links.hidden = !maps.length;
-    } catch {
-      links.hidden = true;
-    }
-  }
-
   load();
-  loadRecentMaps();
 })();
