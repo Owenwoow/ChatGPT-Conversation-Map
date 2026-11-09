@@ -116,24 +116,36 @@
   }
   function liveElement(turn) {return turn?.user?.element?.isConnected ? turn.user.element : turn?.assistant?.element?.isConnected ? turn.assistant.element : null;}
   function headings(turn) {return turn?.assistant?.headings || [];}
+  function scrollBehavior() {return motionPreference.matches?'instant':'smooth';}
   function scrollToElement(element) {
     const root=scrollRoot || document.scrollingElement;
     const offset=element.getBoundingClientRect().top - (root===document.scrollingElement ? 0 : root.getBoundingClientRect().top) - 90;
-    const viewport=root.clientHeight, start=root.scrollTop;
-    const destination=Math.max(0,Math.min(start+offset,root.scrollHeight-viewport));
-    const distance=destination-start;
-    const reduceMotion=motionPreference.matches;
-    if(!reduceMotion && Math.abs(distance)>viewport*2) {
-      const approach=destination-Math.sign(distance)*Math.min(viewport/3,320);
-      root.scrollTo({top:approach,behavior:'instant'});
-    }
-    root.scrollTo({top:destination,behavior:reduceMotion?'instant':'smooth'});
+    root.scrollTo({top:root.scrollTop+offset,behavior:scrollBehavior()});
+  }
+  function scrollHistoryStep(root, distance) {
+    const start=root.scrollTop;
+    const destination=Math.max(0,Math.min(start+distance,root.scrollHeight-root.clientHeight));
+    const behavior=scrollBehavior();
+    const scrolling=root.scrollTo({top:destination,behavior});
+    if(behavior==='instant'||Math.abs(destination-start)<1)return new Promise(resolve=>setTimeout(resolve,120));
+    if(typeof scrolling?.then==='function')return scrolling;
+    const target=root===document.scrollingElement?document:root;
+    return new Promise(resolve=>{
+      const finish=()=>{
+        clearTimeout(timeout);
+        target.removeEventListener('scrollend',finish);
+        resolve();
+      };
+      const timeout=setTimeout(finish,800);
+      target.addEventListener('scrollend',finish,{signal:lifecycle.signal});
+    });
   }
   function cancelNavigation() {navigation++;targetLock=null;}
   async function navigate(id, headingId) {
     const token=++navigation;
     let turn=turns.find(t=>t.id===id); if(!turn)return;
-    active=turn; targetLock={id,until:Date.now()+2400}; render();
+    const lock={id,until:Infinity};
+    active=turn; targetLock=lock; render();
     // Recover only through the page's normal scrolling. Never call private endpoints.
     let element=headingId ? headings(turn).find(h=>h.id===headingId)?.element : liveElement(turn);
     if(!element?.isConnected) {
@@ -150,8 +162,7 @@
         const direction=nearest && nearest.ordinal<turn.ordinal?1:-1;
         const root=scrollRoot;
         if(!root)break;
-        root.scrollBy({top:direction*root.clientHeight*.8,behavior:'instant'});
-        await new Promise(resolve=>setTimeout(resolve,120));
+        await scrollHistoryStep(root,direction*root.clientHeight*.8);
         if(token!==navigation)return;
         refresh();
         if(root.scrollTop===previousTop)stalls++;else stalls=0;
@@ -162,11 +173,12 @@
       turn=turns.find(t=>t.id===id);
       element=headingId ? headings(turn).find(h=>h.id===headingId)?.element : liveElement(turn);
       if(!element?.isConnected) {
-        if(originalRoot?.isConnected && typeof originalTop==='number')originalRoot.scrollTop=originalTop;
+        if(originalRoot?.isConnected && typeof originalTop==='number')originalRoot.scrollTo({top:originalTop,behavior:scrollBehavior()});
         targetLock=null;notify('这条历史消息尚未加载，请向该轮附近滚动后重试。');schedulePosition();return;
       }
     }
     if(token!==navigation)return;
+    lock.until=Date.now()+2400;
     $('.status').hidden=true; scrollToElement(element); schedulePosition();
   }
   function bookmarkPrefix(key) {return `dualNavBookmark:${encodeURIComponent(key)}:`;}

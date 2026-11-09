@@ -31,7 +31,9 @@ function setup() {
       };
     }
     addEventListener(name, listener) { (this.listeners[name] ||= []).push(listener); }
-    removeEventListener() {}
+    removeEventListener(name, listener) {
+      this.listeners[name] = (this.listeners[name] || []).filter(callback => callback !== listener);
+    }
     emit(name) { for (const listener of this.listeners[name] || []) listener({}); }
     setAttribute(name, value) { this.attributes[name] = value; }
     getAttribute(name) { return this.attributes[name]; }
@@ -136,7 +138,7 @@ test('后台扫描暂时找不到主体后，切回同一地址恢复小地图�
   assert.equal(page.controls.get('.tree').querySelector('.heading').textContent, 'a2目录');
 });
 
-test('小地图近跳平滑滚动，远跳双向平滑收尾，减少动态效果时直接定位', () => {
+test('小地图近跳、双向远跳和右侧目录远跳都全程平滑滚动，尊重减少动态效果偏好', () => {
   const page = setup();
   const root = page.document.scrollingElement;
   const [first, second] = page.controls.get('.rail').children;
@@ -145,18 +147,39 @@ test('小地图近跳平滑滚动，远跳双向平滑收尾，减少动态效�
   page.messages[2].element.getBoundingClientRect = () => ({top: 840});
   second.emit('click');
   root.scrollTop = 750;
-  page.messages[2].element.getBoundingClientRect = () => ({top: 6600 - root.scrollTop});
+  page.messages[2].element.getBoundingClientRect = () => ({top: 5890 - root.scrollTop});
   second.emit('click');
-  root.scrollTop = 6100;
-  page.messages[0].element.getBoundingClientRect = () => ({top: 60 - root.scrollTop});
+  root.scrollTop = 5800;
+  page.messages[0].element.getBoundingClientRect = () => ({top: 120 - root.scrollTop});
   first.emit('click');
-  root.scrollTop = 0;
+  root.scrollTop = 30;
+  page.messages[1].headings[0].element.getBoundingClientRect = () => ({top: 4500 - root.scrollTop});
+  page.controls.get('.tree').querySelector('.heading').emit('click');
   page.motionPreference.matches = true;
   second.emit('click');
   assert.deepEqual(page.scrollCalls.map(({top, behavior}) => [top, behavior]), [
-    [750, 'smooth'], [5800, 'instant'], [6100, 'smooth'],
-    [300, 'instant'], [0, 'smooth'], [6100, 'instant']
+    [750, 'smooth'], [5800, 'smooth'], [30, 'smooth'], [4410, 'smooth'], [5800, 'instant']
   ]);
+});
+
+test('历史消息还未挂载时，等待平滑探测结束后再定位', async () => {
+  const page = setup();
+  const root = page.document.scrollingElement;
+  const [first] = page.controls.get('.rail').children;
+  const [user, assistant] = page.messages;
+  page.motionPreference.matches = false;
+  root.scrollTop = 1000;
+  user.element.isConnected = assistant.element.isConnected = false;
+  first.emit('click');
+  assert.equal(page.controls.get('.status').hidden, false);
+  assert.deepEqual(page.scrollCalls.map(({top, behavior}) => [top, behavior]), [[280, 'smooth']]);
+  user.element.isConnected = assistant.element.isConnected = true;
+  user.element.getBoundingClientRect = () => ({top: 120 - root.scrollTop});
+  root.scrollTop = 280;
+  page.document.emit('scrollend');
+  await Promise.resolve();
+  assert.deepEqual(page.scrollCalls.map(({top, behavior}) => [top, behavior]), [[280, 'smooth'], [30, 'smooth']]);
+  assert.equal(page.controls.get('.status').hidden, true);
 });
 
 test('跳转期间的滚动帧不重复更新小地图刻度', () => {
