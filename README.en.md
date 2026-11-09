@@ -24,6 +24,7 @@
 | What you want to do | How Conversation Map helps |
 | --- | --- |
 | Find an earlier question and answer. | The **conversation minimap** displays one tick per turn. Hover or focus a tick to preview an excerpt, then click to jump. Scroll the minimap in long chats. |
+| Trace where a follow-up came from. | The **mind map** shows the main conversation and its branches on a pannable, zoomable canvas. Move a branch or jump back to its source. |
 | Return to an important turn later. | Add or remove **bookmarks** in the preview. Bookmarks for saved conversations stay on your device and survive page reloads. |
 | Read a specific section of a long answer. | The **hierarchical answer outline** recognizes H1–H6 headings, supports section jumps, highlights the current heading, and lets you expand or collapse branches individually or all at once. |
 | Follow an answer as it is generated. | **Live updates** add headings during generation. Scrolling keeps the current turn and heading in sync; selecting another turn switches its outline. |
@@ -69,6 +70,14 @@ The minimap needs **at least two turns** and enough page content to scroll. Hove
 - **Long bright tick:** the current turn. A gold dot appears alongside it when that turn is also bookmarked.
 - Bookmarks require a saved conversation and stable turn identifiers. Temporary chats cannot currently be bookmarked.
 
+### Trace branches in the mind map
+
+In a saved conversation, select **思维导图** next to the minimap. Drag the canvas background to pan and use the mouse wheel or zoom buttons to change the view. Select a card to jump to its turn. Use the card's **⋯** menu to continue from that turn or move it and its descendants.
+
+Select text in an answer and use **Ask ChatGPT**, or use the extension's **引用追问** button to copy a draft into the original composer. The follow-up appears under the source turn. New messages continue that branch until you choose **回到主线**.
+
+The toolbar popup lists the five most recently saved maps. Select one to reopen its conversation and map after closing the tab. Unloaded turns appear as placeholders until you reach that part of the conversation.
+
 ### Browse answer sections
 
 The outline appears only when the answer contains headings. Click a heading to jump to it, or its arrow to collapse or expand its subtree. Hover a long heading to see its full text. The toolbar button cycles through expanding all branches, collapsing them to the outermost headings, and restoring the default behavior. Its icon and tooltip show the next action. Short outlines open fully, and long outlines expand as you scroll.
@@ -90,7 +99,7 @@ Block copying preserves text and HTTPS image links in static cards and grids. Co
 | Data or permission | Purpose and storage |
 | --- | --- |
 | `https://chatgpt.com/*` | The extension runs only on this site and reads loaded questions, answers, and headings to build navigation. |
-| `storage` | Saves settings and bookmarks locally. Bookmarks contain conversation and turn identifiers, not chat text. |
+| `storage` | Saves settings, bookmarks, and mind map links locally. Map records contain conversation and turn identifiers, parent links, and update times. |
 | Chat text, headings, and turn history | Kept only in the current tab's memory and discarded on reload. |
 
 The extension does not request external services, generate AI summaries, or access private ChatGPT APIs. Its interface uses Shadow DOM, and chat text is rendered through `textContent`. There are no runtime dependencies or remote scripts.

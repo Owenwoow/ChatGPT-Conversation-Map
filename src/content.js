@@ -52,6 +52,10 @@
   const rail = $('.rail'), toc = $('.toc'), tree = $('.tree'), preview = $('.preview'), opener = $('.open');
   const foldAll = $('.fold-all');
   const bookmarkButton = $('.bookmark-toggle');
+  const mindMap = globalThis.DualNav.createMindMap?.({
+    shadow, signal:lifecycle.signal, getTurns:()=>turns, getActive:()=>active,
+    getSnapshot:()=>snapshot, navigate, hasStorage, notify
+  });
   function dispose() {
     if(disposed)return;
     disposed=true;lifecycle.abort();domObserver?.disconnect();themeObserver?.disconnect();layoutObserver.disconnect();
@@ -371,7 +375,7 @@
   }
   function render() {renderRail();renderTree();position();}
   function position() {
-    if(!snapshot?.main?.isConnected){rail.hidden=opener.hidden=preview.hidden=true;setTocVisible(false,true);return;}
+    if(!snapshot?.main?.isConnected){rail.hidden=opener.hidden=preview.hidden=true;mindMap?.position(0,rail,false);setTocVisible(false,true);return;}
     const area=adapter.getContentRect(snapshot.main);
     if(!area || !Number.isFinite(area.left))return;
     const mainRect=snapshot.main.getBoundingClientRect();
@@ -385,6 +389,7 @@
     rail.hidden=!settings.leftEnabled || turns.length<2 || root.scrollHeight<=root.clientHeight+80 || leftSpace<70;
     if(rail.hidden)preview.hidden=true;
     rail.style.left=`${leftEdge+40}px`;rail.style.top='50%';rail.style.transform='translateY(-50%)';
+    mindMap?.position(leftEdge+12,rail,settings.leftEnabled);
     rail.style.gap=turns.length>60?'1px':'3px';
     for(const tick of rail.children)tick.style.height=turns.length>60?'8px':'13px';
     if(railNeedsReveal) {
@@ -525,6 +530,7 @@
     if(snapshot.streaming&&!wasStreaming&&settings.autoExpand&&!userClosed){manualClosed=false;}
     wasStreaming=snapshot.streaming;
     if(active)active=turns.find(t=>t.id===active.id)||null;
+    mindMap?.refresh();
     theme();updateActive();
   }
   function scheduleScan(){if(contextAlive()&&!timer)timer=setTimeout(refresh,180);}
@@ -598,6 +604,7 @@
   window.addEventListener('wheel',cancelNavigation,{passive:true,signal:lifecycle.signal});
   window.addEventListener('touchstart',cancelNavigation,{passive:true,signal:lifecycle.signal});
   window.addEventListener('keydown',e=>{
+    if(mindMap?.isOpen())return;
     if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&adapter.isComposer(e.target)){draftSendAt=Date.now();explicitNavigation=false;noteSend();}
     if(['PageDown','PageUp','ArrowDown','ArrowUp','Home','End'].includes(e.key))cancelNavigation();
     if(e.key==='Escape'){
@@ -665,7 +672,7 @@
   if(hasStorage()) {
     try {
       chrome.storage.local.get(defaults).then(value=>{if(contextAlive()){settings={...defaults,...value};scheduleScan();}}).catch(()=>{contextAlive();});
-      chrome.storage.onChanged.addListener((changes,area)=>{if(!contextAlive()||area!=='local')return;for(const key of Object.keys(defaults))if(changes[key])settings[key]=changes[key].newValue??defaults[key];if(!settings.immersiveMode)cancelImmersive();if(Object.keys(changes).some(key=>key.startsWith(bookmarkPrefix(currentKey))))loadBookmarks(currentKey);scheduleScan();});
+      chrome.storage.onChanged.addListener((changes,area)=>{if(!contextAlive()||area!=='local')return;for(const key of Object.keys(defaults))if(changes[key])settings[key]=changes[key].newValue??defaults[key];if(!settings.immersiveMode)cancelImmersive();if(Object.keys(changes).some(key=>key.startsWith(bookmarkPrefix(currentKey))))loadBookmarks(currentKey);mindMap?.storageChanged(changes);scheduleScan();});
     } catch(error) {if(contextAlive())throw error;}
   }
   refresh();

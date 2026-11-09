@@ -5,6 +5,7 @@
       pageTitle: 'ChatGPT Conversation Map · Settings',
       appName: 'Conversation Map',
       tagline: 'Find your way through long conversations.',
+      recentMapsTitle: 'Recent mind maps',
       navigationTitle: 'Navigation',
       leftLabel: 'Conversation map',
       leftHint: 'Jump between turns on the left.',
@@ -38,6 +39,7 @@
       pageTitle: 'ChatGPT 对话地图 · 设置',
       appName: '对话地图',
       tagline: '长对话，也能轻松找到方向。',
+      recentMapsTitle: '最近的思维导图',
       navigationTitle: '导航显示',
       leftLabel: '对话小地图',
       leftHint: '在页面左侧定位历史提问',
@@ -138,5 +140,28 @@
     }
   }
 
+  async function loadRecentMaps() {
+    const model = globalThis.DualNav?.mindMapModel;
+    if (!model) return;
+    try {
+      const maps = model.recentMaps(await chrome.storage.local.get(null));
+      const links = document.getElementById('recentMapLinks');
+      const formatter = new Intl.DateTimeFormat(document.documentElement.lang, {dateStyle:'medium', timeStyle:'short'});
+      links.replaceChildren(...maps.map(({route, updatedAt}) => {
+        const link = document.createElement('a');
+        link.className = 'setting recent-map';
+        link.href = 'https://chatgpt.com' + route + model.openHash;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = formatter.format(updatedAt) + ' · ' + route.slice(-8);
+        return link;
+      }));
+      document.getElementById('recentMaps').hidden = !maps.length;
+    } catch {
+      document.getElementById('recentMaps').hidden = true;
+    }
+  }
+
   load();
+  loadRecentMaps();
 })();

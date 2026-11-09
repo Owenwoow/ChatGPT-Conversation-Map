@@ -2,13 +2,14 @@ const {chromium,expect}=require('@playwright/test');
 const fs=require('node:fs/promises');
 const path=require('node:path');
 const assert=require('node:assert/strict');
+const navigationScripts=['adapter','model','mind-map-model','mind-map','content'];
 (async()=>{
  const browser=await chromium.launch({headless:true});
  const page=await browser.newPage({viewport:{width:1600,height:1000},reducedMotion:'reduce'});
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.route('https://chatgpt.com/**',route=>route.fulfill({path:path.join(__dirname,'fixture.html'),contentType:'text/html'}));
  await page.goto('https://chatgpt.com/c/test');
- for(const script of ['adapter','model','content'])await page.addScriptTag({path:path.join(__dirname,`../src/${script}.js`)});
+ for(const script of navigationScripts)await page.addScriptTag({path:path.join(__dirname,`../src/${script}.js`)});
  const root=page.locator('#dual-navigator-host');
  const tick=root.locator('.tick'), toc=root.locator('.toc');
  await expect(tick).toHaveCount(8);await expect(toc).toBeVisible();
@@ -231,7 +232,7 @@ const assert=require('node:assert/strict');
      }
    }
  });
- for(const script of ['adapter','model','content'])await current.addScriptTag({path:path.join(__dirname,`../src/${script}.js`)});
+ for(const script of navigationScripts)await current.addScriptTag({path:path.join(__dirname,`../src/${script}.js`)});
  const currentRoot=current.locator('#dual-navigator-host');
  await expect(currentRoot.locator('.tick')).toHaveCount(8);
  await expect(currentRoot.locator('.rail')).toBeVisible();await expect(currentRoot.locator('.toc')).toBeVisible();
@@ -325,7 +326,7 @@ const assert=require('node:assert/strict');
  const motionErrors=[];motionPage.on('pageerror',error=>motionErrors.push(error.message));
  await motionPage.route('https://chatgpt.com/**',route=>route.fulfill({path:path.join(__dirname,'fixture.html'),contentType:'text/html'}));
  await motionPage.goto('https://chatgpt.com/c/motion');
- for(const script of ['adapter','model','content'])await motionPage.addScriptTag({path:path.join(__dirname,`../src/${script}.js`)});
+ for(const script of navigationScripts)await motionPage.addScriptTag({path:path.join(__dirname,`../src/${script}.js`)});
  const motionRoot=motionPage.locator('#dual-navigator-host'), motionToc=motionRoot.locator('.toc');
  await expect(motionToc).toHaveAttribute('data-state','open');
  const leaving=await motionPage.evaluate(()=>{const s=document.querySelector('#dual-navigator-host').shadowRoot;s.querySelector('.collapse').click();const panel=s.querySelector('.toc');return {stillMounted:!panel.hidden,inert:panel.inert,hiddenFromAT:panel.getAttribute('aria-hidden'),durations:panel.getAnimations().map(a=>a.effect.getTiming().duration)};});
@@ -349,7 +350,7 @@ const assert=require('node:assert/strict');
  const outlinePage=await browser.newPage({viewport:{width:2200,height:1000},reducedMotion:'reduce'});
  await outlinePage.route('https://chatgpt.com/**',route=>route.fulfill({path:path.join(__dirname,'fixture.html'),contentType:'text/html'}));
  await outlinePage.goto('https://chatgpt.com/c/outline-semantics');
- for(const script of ['adapter','model','content'])await outlinePage.addScriptTag({path:path.join(__dirname,`../src/${script}.js`)});
+ for(const script of navigationScripts)await outlinePage.addScriptTag({path:path.join(__dirname,`../src/${script}.js`)});
  const outlineRoot=outlinePage.locator('#dual-navigator-host'), outlineToc=outlineRoot.locator('.toc');
  await outlinePage.evaluate(()=>{
    document.querySelector('[data-message-id="a0"] .markdown').innerHTML='<h2>正文场景</h2><p>外层章节说明</p><div data-d-component="box"><div data-d-component="row"><div data-d-component="box"><h1 data-d-component="title" data-d-tabular-nums="true">3,985.50</h1></div></div><div data-d-component="grid"><div data-d-component="box"><h2 data-d-component="title" data-d-tabular-nums="true">12.86倍</h2></div></div></div><div data-d-component="box" data-d-has-border><h2>场景</h2><div data-d-component="box" data-d-has-border><h3>卡片内嵌套标题</h3></div><p style="height:800px">卡片正文</p></div><div data-d-component="box"><h3>无边框布局中的正文标题</h3><h3>3,985.50</h3></div><div data-testid="chatgpt-writing-block"><h3>文档中的正文标题</h3></div><pre><h2>代码中的标题</h2></pre><div hidden><h2>隐藏标题</h2></div>';
@@ -463,7 +464,7 @@ const assert=require('node:assert/strict');
  const syncPage=await browser.newPage({viewport:{width:1600,height:1000},reducedMotion:'reduce'});
  await syncPage.route('https://chatgpt.com/**',route=>route.fulfill({path:path.join(__dirname,'fixture.html'),contentType:'text/html'}));
  await syncPage.goto('https://chatgpt.com/c/draft-test-start');
- for(const script of ['adapter','model','content'])await syncPage.addScriptTag({path:path.join(__dirname,`../src/${script}.js`)});
+ for(const script of navigationScripts)await syncPage.addScriptTag({path:path.join(__dirname,`../src/${script}.js`)});
  await require('./draft-scenario.cjs')(syncPage);
  console.log('PASS 编码临时地址、正式URL保留临时容器、跳过临时URL、持续生成、手动状态及历史隔离');
  await syncPage.evaluate(()=>{

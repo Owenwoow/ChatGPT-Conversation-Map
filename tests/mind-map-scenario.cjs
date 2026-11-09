@@ -1,0 +1,140 @@
+const {expect} = require('@playwright/test');
+
+module.exports = async function mindMapScenario(context, popup) {
+  const url = 'https://chatgpt.com/c/mind-map-test';
+  const page = await context.newPage();
+  const root = page.locator('#dual-navigator-host');
+  const board = root.locator('.mm-board');
+  const card = id => board.locator('.mm-card[data-turn-id="' + id + '"]');
+  const keys = () => popup.evaluate(async () => Object.fromEntries(Object.entries(await chrome.storage.local.get(null))
+    .filter(([key]) => key.startsWith('dualNavMap:'))));
+  await page.goto(url);
+  await root.locator('.mm-open').click();
+  await expect(board.locator('.mm-card')).toHaveCount(9);
+  const initial = await board.evaluate(element => element.style.transform);
+  await root.locator('.mm-in').click();
+  await expect.poll(() => board.evaluate(element => element.style.transform)).not.toBe(initial);
+  await root.locator('.mm-fit').click();
+  await card('u1').locator('.mm-node').click();
+  await expect(root.locator('.mm-dialog')).toBeHidden();
+  await expect(root.locator('.tick').nth(1)).toHaveAttribute('aria-current', 'step');
+
+  await page.evaluate(() => {
+    const form = document.createElement('form');
+    form.setAttribute('data-chatgpt-composer', '');
+    form.innerHTML = '<div id="quotes"></div><textarea id="prompt-textarea"></textarea><button type="submit" aria-label="发送">发送</button>';
+    document.querySelector('.composer .input').replaceChildren(form);
+    const native = document.createElement('button');
+    native.type = 'button';
+    native.id = 'native-quote';
+    native.textContent = '向 ChatGPT 提问';
+    native.addEventListener('mousedown', event => event.preventDefault());
+    native.onclick = () => {
+      const item = document.createElement('div');
+      const text = document.createElement('span');
+      text.textContent = document.getSelection().toString();
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.setAttribute('aria-label', '移除第 1 个所选文本附件');
+      remove.textContent = '×';
+      remove.onclick = () => item.remove();
+      item.append(text, remove);
+      document.getElementById('quotes').replaceChildren(item);
+      document.getSelection().removeAllRanges();
+    };
+    form.prepend(native);
+    let index = 8;
+    form.onsubmit = event => {
+      event.preventDefault();
+      if (form.dataset.fail) return;
+      const editor = form.querySelector('textarea');
+      const assistant = addTurn(index);
+      assistant.previousElementSibling.querySelector('[data-message-id]').textContent = editor.value;
+      index++;
+      editor.value = '';
+      document.getElementById('quotes').replaceChildren();
+    };
+    window.selectMapSource = id => {
+      const selection = document.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(document.querySelector('[data-message-id="' + id + '"] p'));
+      selection.removeAllRanges();
+      selection.addRange(range);
+    };
+  });
+  const send = async (message) => {
+    await page.locator('#prompt-textarea').fill(message);
+    await page.getByRole('button', {name: '发送', exact: true}).click();
+  };
+  await page.evaluate(() => selectMapSource('a0'));
+  await page.locator('#native-quote').click();
+  await send('重复问题');
+  const quoteEdge = 'dualNavMap:%2Fc%2Fmind-map-test:u8';
+  await expect.poll(async () => (await keys())[quoteEdge]?.parent).toBe('u0');
+  await expect(root.locator('.mm-branch')).toContainText('当前分支');
+  await send('重复问题');
+  const continuation = 'dualNavMap:%2Fc%2Fmind-map-test:u9';
+  await expect.poll(async () => (await keys())[continuation]?.parent).toBe('u8');
+  await root.locator('.mm-mainline').click();
+
+  await page.evaluate(() => selectMapSource('a2'));
+  await page.locator('#native-quote').click();
+  await page.locator('form').evaluate(form => form.dataset.fail = '1');
+  await send('发送失败');
+  await page.getByRole('button', {name: /所选文本附件/}).click();
+  await page.locator('form').evaluate(form => delete form.dataset.fail);
+  await send('发送失败');
+  await expect(root.locator('.tick')).toHaveCount(11);
+  expect(Object.keys(await keys())).toHaveLength(2);
+
+  await root.locator('.mm-open').click();
+  await root.locator('.mm-fit').click();
+  await card('u8').locator('.mm-menu').click();
+  await expect(root.locator('.mm-destination option[value="u9"]')).toHaveCount(0);
+  await root.locator('.mm-destination').selectOption('u3');
+  await root.locator('.mm-move').click();
+  await expect.poll(async () => (await keys())[quoteEdge]?.parent).toBe('u3');
+  await card('u8').locator('.mm-fold').click();
+  await expect(card('u9')).toHaveCount(0);
+  await card('u8').locator('.mm-fold').click();
+  await expect(card('u9')).toHaveCount(1);
+  await expect(root.locator('.mm-dialog')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(root.locator('.mm-dialog')).toBeHidden();
+
+  await page.evaluate(() => selectMapSource('a3'));
+  await root.locator('.mm-quote').click();
+  const draft = await root.locator('.mm-draft textarea').inputValue();
+  await send(draft + '通过扩展入口追问');
+  await expect.poll(async () => (await keys())['dualNavMap:%2Fc%2Fmind-map-test:u11']?.parent).toBe('u3');
+  await root.locator('.mm-open').click();
+  await root.locator('.mm-fit').click();
+  await card('u1').locator('.mm-menu').click();
+  await root.locator('.mm-continue').click();
+  await expect(root.locator('.mm-branch')).toContainText('第 2 轮');
+  await send('从旧节点续问');
+  await expect.poll(async () => (await keys())['dualNavMap:%2Fc%2Fmind-map-test:u12']?.parent).toBe('u1');
+  await root.locator('.mm-mainline').click();
+  await send('返回主线');
+  await expect(root.locator('.tick')).toHaveCount(14);
+  expect((await keys())['dualNavMap:%2Fc%2Fmind-map-test:u13']).toBeUndefined();
+  expect(JSON.stringify(await keys())).not.toMatch(/重复问题|扩展入口追问|计算机网络/);
+  await page.close();
+  await popup.reload();
+  const recent = popup.locator('#recentMapLinks a');
+  await expect(recent).toHaveCount(1);
+  const [reopened] = await Promise.all([context.waitForEvent('page'), recent.click()]);
+  const reopenedRoot = reopened.locator('#dual-navigator-host');
+  await expect(reopenedRoot.locator('.mm-dialog')).toBeVisible();
+  await expect(reopenedRoot.locator('.mm-placeholder')).toHaveCount(4);
+  await reopened.evaluate(() => {
+    for (let i = 8; i < 14; i++) addTurn(i);
+  });
+  await expect(reopenedRoot.locator('.mm-placeholder')).toHaveCount(0);
+  await reopenedRoot.locator('.mm-fit').click();
+  await reopenedRoot.locator('.mm-card[data-turn-id="u8"] .mm-node').click();
+  await expect(reopenedRoot.locator('.tick').nth(8)).toHaveAttribute('aria-current', 'step');
+  await expect(reopenedRoot.locator('.mm-branch')).toBeHidden();
+  await reopened.close();
+  console.log('PASS 思维导图缩放、原生和显式引用、子树改挂、关页恢复及原文跳转');
+};
