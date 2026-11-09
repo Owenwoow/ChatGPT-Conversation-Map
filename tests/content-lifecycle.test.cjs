@@ -77,7 +77,7 @@ function setup() {
   const timers = new Map(), frames = new Map(), intervals = [], observers = [];
   const motionPreference = {matches: true, addEventListener() {}};
   const scrollCalls = [];
-  document.scrollingElement.scrollBy = options => scrollCalls.push(options);
+  document.scrollingElement.scrollTo = options => scrollCalls.push(options);
   const messages = ['u1', 'a1', 'u2', 'a2'].map((id, index) => ({
     id, role: index % 2 ? 'assistant' : 'user', text: id,
     element: new Element(),
@@ -136,21 +136,26 @@ test('后台扫描暂时找不到主体后，切回同一地址恢复小地图�
   assert.equal(page.controls.get('.tree').querySelector('.heading').textContent, 'a2目录');
 });
 
-test('小地图近距离平滑滚动，远距离双向跳转直接定位，减少动态效果时近距离也直接定位', () => {
+test('小地图近跳平滑滚动，远跳双向平滑收尾，减少动态效果时直接定位', () => {
   const page = setup();
+  const root = page.document.scrollingElement;
   const [first, second] = page.controls.get('.rail').children;
+  root.scrollHeight = 7000;
   page.motionPreference.matches = false;
   page.messages[2].element.getBoundingClientRect = () => ({top: 840});
   second.emit('click');
-  page.messages[2].element.getBoundingClientRect = () => ({top: 4000});
+  root.scrollTop = 750;
+  page.messages[2].element.getBoundingClientRect = () => ({top: 6600 - root.scrollTop});
   second.emit('click');
-  page.messages[0].element.getBoundingClientRect = () => ({top: -4000});
+  root.scrollTop = 6100;
+  page.messages[0].element.getBoundingClientRect = () => ({top: 60 - root.scrollTop});
   first.emit('click');
+  root.scrollTop = 0;
   page.motionPreference.matches = true;
-  page.messages[2].element.getBoundingClientRect = () => ({top: 840});
   second.emit('click');
   assert.deepEqual(page.scrollCalls.map(({top, behavior}) => [top, behavior]), [
-    [750, 'smooth'], [3910, 'instant'], [-4090, 'instant'], [750, 'instant']
+    [750, 'smooth'], [5800, 'instant'], [6100, 'smooth'],
+    [300, 'instant'], [0, 'smooth'], [6100, 'instant']
   ]);
 });
 

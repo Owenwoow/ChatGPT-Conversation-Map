@@ -118,9 +118,16 @@
   function headings(turn) {return turn?.assistant?.headings || [];}
   function scrollToElement(element) {
     const root=scrollRoot || document.scrollingElement;
-    const top=element.getBoundingClientRect().top - (root===document.scrollingElement ? 0 : root.getBoundingClientRect().top) - 90;
-    const longJump=Math.abs(top)>root.clientHeight*2;
-    root.scrollBy({top,behavior:motionPreference.matches||longJump?'instant':'smooth'});
+    const offset=element.getBoundingClientRect().top - (root===document.scrollingElement ? 0 : root.getBoundingClientRect().top) - 90;
+    const viewport=root.clientHeight, start=root.scrollTop;
+    const destination=Math.max(0,Math.min(start+offset,root.scrollHeight-viewport));
+    const distance=destination-start;
+    const reduceMotion=motionPreference.matches;
+    if(!reduceMotion && Math.abs(distance)>viewport*2) {
+      const approach=destination-Math.sign(distance)*Math.min(viewport/3,320);
+      root.scrollTo({top:approach,behavior:'instant'});
+    }
+    root.scrollTo({top:destination,behavior:reduceMotion?'instant':'smooth'});
   }
   function cancelNavigation() {navigation++;targetLock=null;}
   async function navigate(id, headingId) {
