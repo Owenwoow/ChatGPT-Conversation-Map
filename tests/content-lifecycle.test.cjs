@@ -73,8 +73,11 @@ function setup() {
     querySelectorAll: () => []
   });
   const window = new Element();
-  let route = '/c/a', current, scans = 0, nextTimer = 0;
-  const timers = new Map(), intervals = [], observers = [];
+  let route = '/c/a', current, scans = 0, nextTimer = 0, nextFrame = 0;
+  const timers = new Map(), frames = new Map(), intervals = [], observers = [];
+  const motionPreference = {matches: true, addEventListener() {}};
+  const scrollCalls = [];
+  document.scrollingElement.scrollBy = options => scrollCalls.push(options);
   const messages = ['u1', 'a1', 'u2', 'a2'].map((id, index) => ({
     id, role: index % 2 ? 'assistant' : 'user', text: id,
     element: new Element(),
@@ -94,17 +97,19 @@ function setup() {
     DualNav: {adapter, ...model},
     ResizeObserver: class { observe() {} disconnect() {} },
     MutationObserver: class { constructor(callback) { observers.push(callback); } observe() {} disconnect() {} },
-    matchMedia: () => ({matches: true, addEventListener() {}}),
+    matchMedia: () => motionPreference,
     getComputedStyle: () => ({}), innerWidth: 1600, innerHeight: 900,
     setInterval: callback => { intervals.push(callback); return intervals.length; }, clearInterval() {},
     setTimeout: callback => { timers.set(++nextTimer, callback); return nextTimer; }, clearTimeout: id => timers.delete(id),
-    requestAnimationFrame: () => 1, cancelAnimationFrame() {}
+    requestAnimationFrame: callback => { frames.set(++nextFrame, callback); return nextFrame; },
+    cancelAnimationFrame: id => frames.delete(id)
   });
   return {
-    controls, host, document, window,
+    controls, host, document, window, messages, motionPreference, scrollCalls,
     scans: () => scans,
     poll: () => intervals[0](),
     flush: () => { const pending = [...timers.values()]; timers.clear(); for (const callback of pending) callback(); },
+    flushFrames: () => { const pending = [...frames.values()]; frames.clear(); for (const callback of pending) callback(); },
     loseMain: () => { current = {...current, main: null, messages: []}; window.emit('resize'); },
     restoreMain: () => { current = liveSnapshot(route); },
     changeRoute: key => { route = key; current = {...liveSnapshot(key), messages: []}; },
@@ -129,6 +134,48 @@ test('后台扫描暂时找不到主体后，切回同一地址恢复小地图�
   assert.equal(rail.children.length, 2);
   assert.equal(toc.hidden, false);
   assert.equal(page.controls.get('.tree').querySelector('.heading').textContent, 'a2目录');
+});
+
+test('小地图近距离平滑滚动，远距离双向跳转直接定位，减少动态效果时近距离也直接定位', () => {
+  const page = setup();
+  const [first, second] = page.controls.get('.rail').children;
+  page.motionPreference.matches = false;
+  page.messages[2].element.getBoundingClientRect = () => ({top: 840});
+  second.emit('click');
+  page.messages[2].element.getBoundingClientRect = () => ({top: 4000});
+  second.emit('click');
+  page.messages[0].element.getBoundingClientRect = () => ({top: -4000});
+  first.emit('click');
+  page.motionPreference.matches = true;
+  page.messages[2].element.getBoundingClientRect = () => ({top: 840});
+  second.emit('click');
+  assert.deepEqual(page.scrollCalls.map(({top, behavior}) => [top, behavior]), [
+    [750, 'smooth'], [3910, 'instant'], [-4090, 'instant'], [750, 'instant']
+  ]);
+});
+
+test('跳转期间的滚动帧不重复更新小地图刻度', () => {
+  const page = setup();
+  const [first, second] = page.controls.get('.rail').children;
+  first.emit('click');
+  assert.equal(first.getAttribute('aria-current'), 'step');
+  let labelWrites = 0;
+  for (const tick of [first, second]) {
+    const setAttribute = tick.setAttribute.bind(tick);
+    tick.setAttribute = (name, value) => {
+      if (name === 'aria-label') labelWrites++;
+      setAttribute(name, value);
+    };
+  }
+  page.flushFrames();
+  page.document.scrollingElement.emit('scroll');
+  page.flushFrames();
+  assert.equal(labelWrites, 0);
+  page.window.emit('wheel');
+  page.document.scrollingElement.emit('scroll');
+  page.flushFrames();
+  assert.equal(second.getAttribute('aria-current'), 'step');
+  assert.equal(labelWrites, 2);
 });
 
 test('页面恢复和重新获得焦点会重新同步，保留用户手动收起状态', () => {
