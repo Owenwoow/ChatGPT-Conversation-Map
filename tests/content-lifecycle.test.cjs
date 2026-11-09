@@ -31,9 +31,7 @@ function setup() {
       };
     }
     addEventListener(name, listener) { (this.listeners[name] ||= []).push(listener); }
-    removeEventListener(name, listener) {
-      this.listeners[name] = (this.listeners[name] || []).filter(callback => callback !== listener);
-    }
+    removeEventListener() {}
     emit(name) { for (const listener of this.listeners[name] || []) listener({}); }
     setAttribute(name, value) { this.attributes[name] = value; }
     getAttribute(name) { return this.attributes[name]; }
@@ -75,11 +73,8 @@ function setup() {
     querySelectorAll: () => []
   });
   const window = new Element();
-  let route = '/c/a', current, scans = 0, nextTimer = 0, nextFrame = 0;
-  const timers = new Map(), frames = new Map(), intervals = [], observers = [];
-  const motionPreference = {matches: true, addEventListener() {}};
-  const scrollCalls = [];
-  document.scrollingElement.scrollTo = options => scrollCalls.push(options);
+  let route = '/c/a', current, scans = 0, nextTimer = 0;
+  const timers = new Map(), intervals = [], observers = [];
   const messages = ['u1', 'a1', 'u2', 'a2'].map((id, index) => ({
     id, role: index % 2 ? 'assistant' : 'user', text: id,
     element: new Element(),
@@ -99,19 +94,17 @@ function setup() {
     DualNav: {adapter, ...model},
     ResizeObserver: class { observe() {} disconnect() {} },
     MutationObserver: class { constructor(callback) { observers.push(callback); } observe() {} disconnect() {} },
-    matchMedia: () => motionPreference,
+    matchMedia: () => ({matches: true, addEventListener() {}}),
     getComputedStyle: () => ({}), innerWidth: 1600, innerHeight: 900,
     setInterval: callback => { intervals.push(callback); return intervals.length; }, clearInterval() {},
     setTimeout: callback => { timers.set(++nextTimer, callback); return nextTimer; }, clearTimeout: id => timers.delete(id),
-    requestAnimationFrame: callback => { frames.set(++nextFrame, callback); return nextFrame; },
-    cancelAnimationFrame: id => frames.delete(id)
+    requestAnimationFrame: () => 1, cancelAnimationFrame() {}
   });
   return {
-    controls, host, document, window, messages, motionPreference, scrollCalls,
+    controls, host, document, window,
     scans: () => scans,
     poll: () => intervals[0](),
     flush: () => { const pending = [...timers.values()]; timers.clear(); for (const callback of pending) callback(); },
-    flushFrames: () => { const pending = [...frames.values()]; frames.clear(); for (const callback of pending) callback(); },
     loseMain: () => { current = {...current, main: null, messages: []}; window.emit('resize'); },
     restoreMain: () => { current = liveSnapshot(route); },
     changeRoute: key => { route = key; current = {...liveSnapshot(key), messages: []}; },
@@ -136,74 +129,6 @@ test('后台扫描暂时找不到主体后，切回同一地址恢复小地图�
   assert.equal(rail.children.length, 2);
   assert.equal(toc.hidden, false);
   assert.equal(page.controls.get('.tree').querySelector('.heading').textContent, 'a2目录');
-});
-
-test('小地图近跳、双向远跳和右侧目录远跳都全程平滑滚动，尊重减少动态效果偏好', () => {
-  const page = setup();
-  const root = page.document.scrollingElement;
-  const [first, second] = page.controls.get('.rail').children;
-  root.scrollHeight = 7000;
-  page.motionPreference.matches = false;
-  page.messages[2].element.getBoundingClientRect = () => ({top: 840});
-  second.emit('click');
-  root.scrollTop = 750;
-  page.messages[2].element.getBoundingClientRect = () => ({top: 5890 - root.scrollTop});
-  second.emit('click');
-  root.scrollTop = 5800;
-  page.messages[0].element.getBoundingClientRect = () => ({top: 120 - root.scrollTop});
-  first.emit('click');
-  root.scrollTop = 30;
-  page.messages[1].headings[0].element.getBoundingClientRect = () => ({top: 4500 - root.scrollTop});
-  page.controls.get('.tree').querySelector('.heading').emit('click');
-  page.motionPreference.matches = true;
-  second.emit('click');
-  assert.deepEqual(page.scrollCalls.map(({top, behavior}) => [top, behavior]), [
-    [750, 'smooth'], [5800, 'smooth'], [30, 'smooth'], [4410, 'smooth'], [5800, 'instant']
-  ]);
-});
-
-test('历史消息还未挂载时，等待平滑探测结束后再定位', async () => {
-  const page = setup();
-  const root = page.document.scrollingElement;
-  const [first] = page.controls.get('.rail').children;
-  const [user, assistant] = page.messages;
-  page.motionPreference.matches = false;
-  root.scrollTop = 1000;
-  user.element.isConnected = assistant.element.isConnected = false;
-  first.emit('click');
-  assert.equal(page.controls.get('.status').hidden, false);
-  assert.deepEqual(page.scrollCalls.map(({top, behavior}) => [top, behavior]), [[280, 'smooth']]);
-  user.element.isConnected = assistant.element.isConnected = true;
-  user.element.getBoundingClientRect = () => ({top: 120 - root.scrollTop});
-  root.scrollTop = 280;
-  page.document.emit('scrollend');
-  await Promise.resolve();
-  assert.deepEqual(page.scrollCalls.map(({top, behavior}) => [top, behavior]), [[280, 'smooth'], [30, 'smooth']]);
-  assert.equal(page.controls.get('.status').hidden, true);
-});
-
-test('跳转期间的滚动帧不重复更新小地图刻度', () => {
-  const page = setup();
-  const [first, second] = page.controls.get('.rail').children;
-  first.emit('click');
-  assert.equal(first.getAttribute('aria-current'), 'step');
-  let labelWrites = 0;
-  for (const tick of [first, second]) {
-    const setAttribute = tick.setAttribute.bind(tick);
-    tick.setAttribute = (name, value) => {
-      if (name === 'aria-label') labelWrites++;
-      setAttribute(name, value);
-    };
-  }
-  page.flushFrames();
-  page.document.scrollingElement.emit('scroll');
-  page.flushFrames();
-  assert.equal(labelWrites, 0);
-  page.window.emit('wheel');
-  page.document.scrollingElement.emit('scroll');
-  page.flushFrames();
-  assert.equal(second.getAttribute('aria-current'), 'step');
-  assert.equal(labelWrites, 2);
 });
 
 test('页面恢复和重新获得焦点会重新同步，保留用户手动收起状态', () => {

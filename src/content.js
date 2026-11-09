@@ -40,7 +40,6 @@
     :host{all:initial;position:fixed;inset:0;z-index:40;pointer-events:none;font:12px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--dn-text,#666);--dn-bg:#fff;--dn-text:#777;--dn-strong:#222;--dn-line:#dedede;--dn-hover:#f1f1f1;--dn-shadow:0 5px 24px #0000000d}
     *{box-sizing:border-box}button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;padding:0}button:focus-visible{outline:2px solid var(--dn-text);outline-offset:3px}button:hover{color:var(--dn-strong)}[hidden]{display:none!important}
     .rail{position:fixed;width:30px;max-height:66vh;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:none;pointer-events:auto;padding:8px 2px;display:flex;flex-direction:column;gap:3px;align-items:center;border-radius:10px}.rail::-webkit-scrollbar{display:none}.tick{height:13px;min-height:7px;width:26px;display:flex;align-items:center;justify-content:flex-start;border-radius:3px;flex-shrink:0}.tick:after{content:"";height:2px;width:9px;background:var(--dn-text);opacity:.37;border-radius:2px;transition:width .16s,opacity .16s}.tick:nth-child(5n):after{width:15px}.tick:hover:after{width:21px;opacity:.8}.tick.active:after{width:23px;opacity:1;background:var(--dn-strong)}
-    .rail.dense{gap:1px}.rail.dense .tick{height:8px}
     .preview{pointer-events:auto;position:fixed;width:330px;padding:14px 16px;border:1px solid var(--dn-line);border-radius:16px;background:var(--dn-bg);box-shadow:var(--dn-shadow)}.eyebrow{font-size:10px;letter-spacing:.04em;color:var(--dn-text);margin-bottom:7px}.question{font-size:13px;font-weight:600;color:var(--dn-strong);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.answer{margin:7px 0 0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;color:var(--dn-text);line-height:1.7}
     .tick{position:relative}.tick.marked:after{width:21px;opacity:1;background:var(--dn-bookmark)}.tick.marked.active:after{width:23px;background:var(--dn-strong)}.tick.marked.active:before{content:"";position:absolute;right:0;width:3px;height:3px;border-radius:50%;background:var(--dn-bookmark)}.preview .question{padding-right:25px}.bookmark-toggle{position:absolute;right:11px;top:11px;width:26px;height:26px;border-radius:6px;display:grid;place-items:center}.bookmark-toggle:hover{background:var(--dn-hover)}.bookmark-toggle svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linejoin:round}.bookmark-toggle[aria-pressed=true] svg{fill:var(--dn-strong);stroke:var(--dn-strong)}.bookmark-toggle:disabled{opacity:.35;cursor:default}
     .toc{position:fixed;width:280px;pointer-events:auto;max-height:calc(100vh - 180px);display:flex;flex-direction:column;transform-origin:top right}.toc[data-state=opening],.toc[data-state=closing]{will-change:opacity,transform}.toc[data-state=closing]{pointer-events:none}.toc.overlay{padding:8px;border:1px solid var(--dn-line);border-radius:12px;background:var(--dn-bg);box-shadow:var(--dn-shadow)}.toc-head{display:flex;justify-content:flex-end;margin-bottom:2px;padding:0 3px}.icon{width:26px;height:26px;border-radius:6px;font-size:18px}.icon:hover{background:var(--dn-hover);color:var(--dn-strong)}.tree{overflow:auto;scrollbar-width:thin;scrollbar-color:var(--dn-line) transparent;overscroll-behavior:contain;padding:3px 3px 10px;min-height:0}.branch{position:relative}.children{margin-left:10px;padding-left:6px;border-left:1px solid var(--dn-line);overflow:hidden}.row{display:flex;align-items:flex-start;margin:2px 0;min-height:29px}.row:hover>.heading,.row.active>.heading{background:var(--dn-hover)}.row.active>.heading{color:var(--dn-strong)}.heading{padding:6px 8px;text-align:left;line-height:1.55;flex:1;min-width:0;border-radius:6px;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.heading:focus-visible{outline-offset:-2px}.disclosure{width:22px;min-width:22px;min-height:29px;padding:6px 0;opacity:.7;font-size:12px;border-radius:5px}.disclosure:hover{background:var(--dn-hover);opacity:1}.chevron{display:block;transition:transform 160ms cubic-bezier(.2,.8,.2,1)}.disclosure[aria-expanded=true] .chevron{transform:rotate(90deg)}.leaf{width:22px;flex-shrink:0}.open{position:fixed;pointer-events:auto;width:30px;height:30px;border-radius:8px;background:var(--dn-bg);color:var(--dn-text);font-size:21px}.open:hover{background:var(--dn-hover)}.icon,.open,.heading,.disclosure{transition:background-color 120ms ease,color 120ms ease,transform 100ms ease}.icon:active,.open:active{transform:scale(.9)}.heading:active{transform:translateX(1px) scale(.985)}.disclosure:active{transform:scale(.92)}.status{position:fixed;bottom:110px;left:50%;transform:translateX(-50%);background:var(--dn-bg);color:var(--dn-strong);padding:10px 16px;border:1px solid var(--dn-line);border-radius:12px;box-shadow:var(--dn-shadow);max-width:min(90vw,420px)}
@@ -116,36 +115,16 @@
   }
   function liveElement(turn) {return turn?.user?.element?.isConnected ? turn.user.element : turn?.assistant?.element?.isConnected ? turn.assistant.element : null;}
   function headings(turn) {return turn?.assistant?.headings || [];}
-  function scrollBehavior() {return motionPreference.matches?'instant':'smooth';}
   function scrollToElement(element) {
     const root=scrollRoot || document.scrollingElement;
-    const offset=element.getBoundingClientRect().top - (root===document.scrollingElement ? 0 : root.getBoundingClientRect().top) - 90;
-    root.scrollTo({top:root.scrollTop+offset,behavior:scrollBehavior()});
-  }
-  function scrollHistoryStep(root, distance) {
-    const start=root.scrollTop;
-    const destination=Math.max(0,Math.min(start+distance,root.scrollHeight-root.clientHeight));
-    const behavior=scrollBehavior();
-    const scrolling=root.scrollTo({top:destination,behavior});
-    if(behavior==='instant'||Math.abs(destination-start)<1)return new Promise(resolve=>setTimeout(resolve,120));
-    if(typeof scrolling?.then==='function')return scrolling;
-    const target=root===document.scrollingElement?document:root;
-    return new Promise(resolve=>{
-      const finish=()=>{
-        clearTimeout(timeout);
-        target.removeEventListener('scrollend',finish);
-        resolve();
-      };
-      const timeout=setTimeout(finish,800);
-      target.addEventListener('scrollend',finish,{signal:lifecycle.signal});
-    });
+    const top=element.getBoundingClientRect().top - (root===document.scrollingElement ? 0 : root.getBoundingClientRect().top) - 90;
+    root.scrollBy({top,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
   }
   function cancelNavigation() {navigation++;targetLock=null;}
   async function navigate(id, headingId) {
     const token=++navigation;
     let turn=turns.find(t=>t.id===id); if(!turn)return;
-    const lock={id,until:Infinity};
-    active=turn; targetLock=lock; render();
+    active=turn; targetLock={id,until:Date.now()+2400}; render();
     // Recover only through the page's normal scrolling. Never call private endpoints.
     let element=headingId ? headings(turn).find(h=>h.id===headingId)?.element : liveElement(turn);
     if(!element?.isConnected) {
@@ -162,7 +141,8 @@
         const direction=nearest && nearest.ordinal<turn.ordinal?1:-1;
         const root=scrollRoot;
         if(!root)break;
-        await scrollHistoryStep(root,direction*root.clientHeight*.8);
+        root.scrollBy({top:direction*root.clientHeight*.8,behavior:'instant'});
+        await new Promise(resolve=>setTimeout(resolve,120));
         if(token!==navigation)return;
         refresh();
         if(root.scrollTop===previousTop)stalls++;else stalls=0;
@@ -173,12 +153,11 @@
       turn=turns.find(t=>t.id===id);
       element=headingId ? headings(turn).find(h=>h.id===headingId)?.element : liveElement(turn);
       if(!element?.isConnected) {
-        if(originalRoot?.isConnected && typeof originalTop==='number')originalRoot.scrollTo({top:originalTop,behavior:scrollBehavior()});
+        if(originalRoot?.isConnected && typeof originalTop==='number')originalRoot.scrollTop=originalTop;
         targetLock=null;notify('这条历史消息尚未加载，请向该轮附近滚动后重试。');schedulePosition();return;
       }
     }
     if(token!==navigation)return;
-    lock.until=Date.now()+2400;
     $('.status').hidden=true; scrollToElement(element); schedulePosition();
   }
   function bookmarkPrefix(key) {return `dualNavBookmark:${encodeURIComponent(key)}:`;}
@@ -271,7 +250,6 @@
       }
       for(const tick of existing.values())tick.remove();
       rail.scrollTop=oldScroll;
-      rail.classList.toggle('dense',turns.length>60);
     }
     for(const [index,tick] of Array.from(rail.children).entries()) {
       const turn=turns[index];
@@ -407,6 +385,8 @@
     rail.hidden=!settings.leftEnabled || turns.length<2 || root.scrollHeight<=root.clientHeight+80 || leftSpace<70;
     if(rail.hidden)preview.hidden=true;
     rail.style.left=`${leftEdge+40}px`;rail.style.top='50%';rail.style.transform='translateY(-50%)';
+    rail.style.gap=turns.length>60?'1px':'3px';
+    for(const tick of rail.children)tick.style.height=turns.length>60?'8px':'13px';
     if(railNeedsReveal) {
       const focusedTick=shadow.activeElement?.classList.contains('tick')?shadow.activeElement:shadow.activeElement===bookmarkButton?previewTick:null;
       if(!rail.hidden && focusedTick?.isConnected)revealRailTick(focusedTick);
@@ -437,10 +417,9 @@
     toc.style.left=`${rightEdge-panelWidth-rightInset}px`;toc.style.top='100px';
     opener.style.left=`${rightEdge-rightInset-30}px`;opener.style.top='100px';
   }
-  function updateActive(forceRender=false) {
-    const previous=active;
+  function updateActive() {
     if(targetLock && Date.now()<targetLock.until) {
-      if(active?.id!==targetLock.id)active=turns.find(t=>t.id===targetLock.id)||active;
+      active=turns.find(t=>t.id===targetLock.id)||active;
     } else {
       targetLock=null;
       const rootTop=scrollRoot===document.scrollingElement?0:scrollRoot?.getBoundingClientRect().top||0;
@@ -454,8 +433,7 @@
       }
       if(selected)active=selected;
     }
-    if(forceRender||active!==previous)render();
-    else {highlightHeadings(false);position();}
+    render();
   }
   function schedulePosition(){if(contextAlive()&&!frame)frame=requestAnimationFrame(()=>{frame=0;if(contextAlive())updateActive();});}
   function scheduleLayout(){if(contextAlive()&&!layoutFrame)layoutFrame=requestAnimationFrame(()=>{layoutFrame=0;if(contextAlive())position();});}
@@ -547,7 +525,7 @@
     if(snapshot.streaming&&!wasStreaming&&settings.autoExpand&&!userClosed){manualClosed=false;}
     wasStreaming=snapshot.streaming;
     if(active)active=turns.find(t=>t.id===active.id)||null;
-    theme();updateActive(true);
+    theme();updateActive();
   }
   function scheduleScan(){if(contextAlive()&&!timer)timer=setTimeout(refresh,180);}
   function resumePage() {
