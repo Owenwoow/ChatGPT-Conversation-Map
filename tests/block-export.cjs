@@ -221,6 +221,51 @@ async function blockExportScenario(page,popup) {
   } finally {await note.close();}
   console.log('PASS 导出后图标保持固定尺寸，分隔线留白透明，卡片宽度随阅读容器变化');
 
+  await page.evaluate(()=>{
+   const style=document.createElement('style');
+   style.textContent=`
+    #steps-card ol{display:flex;flex-direction:column;gap:12px;list-style:none;counter-reset:d-list-item;margin:0;padding:0}
+    #steps-card li{position:relative;display:flex;align-items:flex-start;gap:8px;counter-increment:d-list-item}
+    #steps-card li>span{display:flex;align-items:center;justify-content:center;flex-shrink:0;width:24px;height:26px}
+    #steps-card li>span::before{content:counter(d-list-item)}
+    #steps-card li:not(:last-child)::after{content:"";position:absolute;inset-inline-start:11px;inset-block-start:28px;inset-block-end:-10px;width:2px;background:#444}
+    #steps-card p{margin:0} #steps-card p+p{margin-top:16px}
+   `;
+   document.head.append(style);
+   const item=(title,description)=>`<li data-d-component="list-item" data-d-connector="solid"><span data-d-marker="number" aria-hidden="true"></span><div><p><strong>${title}</strong></p><p>${description}</p></div></li>`;
+   const list=(...items)=>`<ol data-d-component="list" data-d-marker="number" data-d-marker-layout="custom">${items.join('')}</ol>`;
+   document.querySelector('[data-dil-response]').insertAdjacentHTML('beforeend',`<div id="steps-card" data-d-component="box" data-d-has-border style="border:1px solid;padding:12px;font:16px/26px system-ui">
+    ${list(item('发现','记录线索、复现条件和原始证据，方便下一步独立确认问题。'),item('确认','核对证据。'))}
+    ${list(item('复测','验证修复。'))}
+   </div>`);
+  });
+  await page.locator('#steps-card strong').first().hover();await expect(copy).toBeVisible();
+  await copy.click();await expect(copy).toHaveAttribute('data-state','success');
+  const steps=await page.evaluate(()=>navigator.clipboard.readText());
+  const stepsNote=await page.context().newPage();
+  try {
+   await stepsNote.setContent(`<!doctype html><meta charset="utf-8"><main style="width:600px">${steps}</main>`);
+   assert.deepEqual(await stepsNote.locator('li > span:first-child').allTextContents(),['1','2','1']);
+   assert.deepEqual(await stepsNote.locator('li strong').allTextContents(),['发现','确认','复测']);
+   await expect(stepsNote.locator('li > span[aria-hidden="true"]')).toHaveCount(1);
+   const first=stepsNote.locator('li').first();
+   const measure=()=>first.evaluate(item=>{
+    const [marker,body,line]=Array.from(item.children,child=>child.getBoundingClientRect());
+    return {indent:body.left-marker.left,lineCentered:line.left+line.width/2===marker.left+marker.width/2,
+     lineHeight:line.height,lineWidth:line.width};
+   });
+   const wide=await measure();
+   assert.equal(wide.indent,32);
+   assert.equal(wide.lineCentered,true);
+   assert.equal(wide.lineWidth,2);
+   assert(wide.lineHeight>0);
+   await stepsNote.locator('main').evaluate(el=>el.style.width='220px');
+   const narrow=await measure();
+   assert.equal(narrow.indent,wide.indent);
+   assert(narrow.lineHeight>wide.lineHeight,'说明换行后连接线应随列表项延长');
+  } finally {await stepsNote.close();}
+  console.log('PASS 步骤图块保留编号、内容缩进和随文字换行延长的连接线');
+
   if (popup) {
    const readyPopup=await require('./context-reload-scenario.cjs').reloadExtension(page,popup);
    await expect(host).toHaveCount(0);

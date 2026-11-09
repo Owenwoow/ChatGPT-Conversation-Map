@@ -15,6 +15,7 @@
   const nativeExport = '[data-chart-widget-download-exclude],a[download],button:is([data-testid*="download" i],[aria-label^="Download" i],[aria-label^="下载"],[title^="Download" i],[title^="下载"])';
   const unsupported = `input,textarea,select,button:not(${imageControls}),[role="button"]:not(${inlineReference}),[role="radio"],[role="tab"],[contenteditable="true"],iframe,canvas,video,audio,object,embed,${nativeExport}`;
   const blocks = '[data-d-component="box"],[data-d-component="grid"]';
+  const numberedSteps = 'ol[data-d-component="list"][data-d-marker-layout="custom"][data-d-marker="number"] > li[data-d-component="list-item"]';
   const htmlTags = new Set('div p span strong b em i small br hr ul ol li h1 h2 h3 h4 h5 h6 table thead tbody tfoot tr th td blockquote code pre a img figure figcaption'.split(' '));
   const svgTags = new Set('svg g path rect circle ellipse line polyline polygon text tspan title'.split(' '));
   const dropTags = new Set('script style template noscript iframe object embed form input textarea select button canvas video audio'.split(' '));
@@ -142,8 +143,13 @@
   function portableStyle(value) {
     return value && !/url\s*\(|expression\s*\(|@import|var\s*\(/i.test(value);
   }
+  function inlineStyle(style, properties) {
+    return properties.map(property => [property,style.getPropertyValue(property)])
+      .filter(([,value]) => portableStyle(value)).map(([property,value]) => `${property}:${value}`).join(';');
+  }
   function exportBlock(block) {
     let count = 0;
+    const stepNumbers = new Map();
     function serialize(node) {
       if (++count > 2500) throw new Error('图块过大');
       if (node.nodeType === Node.TEXT_NODE) return escape(node.textContent);
@@ -163,7 +169,33 @@
       if (tag === 'svg' && node.getAttribute('data-d-component') === 'icon' && node.querySelector('path')?.getAttribute('d')?.startsWith('M12.707 18.707')) {
         return `<span style="display:block;height:16px;font-size:16px;line-height:16px;color:${escape(style.color)};">↓</span>`;
       }
-      const content = Array.from(node.childNodes,serialize).join('');
+      let marker = '', connector = '';
+      if (node.matches(numberedSteps)) {
+        // ChatGPT draws the number and connector with pseudo-elements. Export
+        // them as HTML so the list doesn't depend on the site's stylesheet.
+        const list = node.parentElement;
+        const number = (stepNumbers.get(list) || 0) + 1;
+        stepNumbers.set(list,number);
+        const source = node.firstElementChild;
+        if (source?.matches('span[data-d-marker="number"][aria-hidden="true"]:not([hidden],[inert])')) {
+          const markerStyle = getComputedStyle(source);
+          const counter = getComputedStyle(source,'::before');
+          if (markerStyle.display !== 'none' && counter.content.startsWith('counter(')) {
+            const layout = inlineStyle(markerStyle,['display','align-items','justify-content','flex-shrink','width','height','line-height']);
+            marker = `<span style="${escape(layout + ';' + inlineStyle(counter,['color']))}">${number}</span>`;
+          }
+        }
+        if (node.getAttribute('data-d-connector') === 'solid') {
+          const line = getComputedStyle(node,'::after');
+          if (line.content === '""' && line.position === 'absolute') {
+            // Keep the bottom inset rather than freezing the computed height:
+            // the line should grow when a description wraps in the note.
+            const layout = inlineStyle(line,['position','inset-inline-start','inset-block-start','inset-block-end','width','background-color']);
+            connector = `<span aria-hidden="true" style="${escape(layout)}"></span>`;
+          }
+        }
+      }
+      const content = marker + Array.from(node.childNodes,serialize).join('') + connector;
       if (!htmlTags.has(tag) && !svgTags.has(tag)) return content;
       let dividerThickness = null;
       if (node.matches('hr,[data-d-component="divider"]')) {
@@ -184,6 +216,7 @@
         }
         if (portableStyle(value)) declarations.push(`${property}:${value}`);
       }
+      if (connector) declarations.push('position:relative');
       if (node === block) declarations.push(`width:100%;margin:0;background-color:${opaqueBackground(block)};box-sizing:border-box`);
       if (src) declarations.push('display:block','width:100%','height:auto');
       let attributes = ` style="${escape(declarations.join(';'))}"`;
