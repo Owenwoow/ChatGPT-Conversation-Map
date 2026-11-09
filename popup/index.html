@@ -17,8 +17,9 @@
   </header>
 
   <main>
-    <section id="recentMaps" aria-labelledby="recentMapsTitle" hidden>
-      <h2 id="recentMapsTitle" data-i18n="recentMapsTitle">Recent mind maps</h2>
+    <section aria-labelledby="recentMapsTitle">
+      <h2 id="recentMapsTitle" data-i18n="recentMapsTitle">Notebook</h2>
+      <div class="card"><a class="setting recent-map" id="openNotebook" href="notebook.html" target="_blank" data-i18n="openNotebook">Open notebook</a></div>
       <div id="recentMapLinks" class="card"></div>
     </section>
     <section aria-labelledby="navigationTitle">
@@ -83,6 +84,7 @@
     <p id="status" role="status" aria-live="polite" aria-atomic="true" data-state="loading" data-i18n="loading">Loading settings…</p>
   </footer>
   <script src="../src/mind-map-model.js"></script>
+  <script src="../src/notebook-model.js"></script>
   <script src="settings.js"></script>
 </body>
 </html>

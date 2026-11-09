@@ -69,6 +69,7 @@ h2 { margin: 0 2px 7px; color: var(--muted); font-size: 10px; font-weight: 650; 
 .setting + .setting { border-top: 1px solid var(--line); }
 .setting:hover { background: var(--hover); }
 .recent-map { color: inherit; text-decoration: none; }
+#recentMapLinks:not(:empty) { margin-top: 5px; }
 .setting-copy { min-width: 0; }
 .setting-title { display: block; font-size: 12px; font-weight: 550; }
 small { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; line-height: 1.5; }

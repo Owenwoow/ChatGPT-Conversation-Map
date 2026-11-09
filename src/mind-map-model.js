@@ -1,7 +1,6 @@
 (function (root) {
   'use strict';
   const prefix = 'dualNavMap:';
-  const openHash = '#dual-nav-mind-map';
   const card = {width: 184, height: 76, column: 226, row: 94, pad: 24};
 
   function savedPath(path) {
@@ -29,15 +28,6 @@
       } catch {}
     }
     return edges;
-  }
-
-  function recentMaps(items) {
-    const dates = new Map();
-    for (const {route, updatedAt} of readEdges(items).values()) {
-      dates.set(route, Math.max(dates.get(route) || 0, updatedAt));
-    }
-    return Array.from(dates, ([route, updatedAt]) => ({route, updatedAt}))
-      .sort((a, b) => b.updatedAt - a.updatedAt || a.route.localeCompare(b.route)).slice(0, 5);
   }
 
   function canMove(parents, child, parent) {
@@ -101,7 +91,7 @@
     return users.at(-2)?.id === send.tail ? next : null;
   }
 
-  const api = {prefix, openHash, card, savedPath, edgeKey, readEdges, recentMaps, canMove, makeGraph, layout, appendedTurn};
+  const api = {savedPath, edgeKey, readEdges, makeGraph, layout, appendedTurn};
   (root.DualNav ||= {}).mindMapModel = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(globalThis);
