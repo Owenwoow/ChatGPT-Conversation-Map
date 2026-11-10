@@ -457,7 +457,7 @@
     if(!current.main)return;
     const users=current.messages.filter(message=>message.role==='user');
     if(currentKey===key)users.push(...turns.map(turn=>turn.user).filter(Boolean));
-    immersivePending={at:Date.now(),key,draft:adapter.isDraftKey(key),savedKey:null,
+    immersivePending={at:Date.now(),key,draft:adapter.isDraftKey(key),savedKey:null,hasPreviousUser:users.length>0,
       ids:new Set(users.map(message=>message.id)),
       slots:new Set(users.map(message=>message.slotId).filter(Boolean)),
       elements:new WeakSet(users.map(message=>message.element).filter(Boolean))};
@@ -475,6 +475,7 @@
     }
     if(!nextSnapshot.main || !nextSnapshot.messages.some(message=>message.role==='user' &&
         !pending.ids.has(message.id) && !pending.slots.has(message.slotId) && !pending.elements.has(message.element)))return;
+    if(!pending.hasPreviousUser){cancelImmersive();return;}
     const sidebar=adapter.sidebarState();
     if(!sidebar){if(!immersiveTimer)immersiveTimer=setTimeout(()=>{immersiveTimer=0;scheduleScan();},250);return;}
     cancelImmersive();

@@ -30,9 +30,10 @@ module.exports=async function immersiveScenario(page,popup) {
  await draft();await composer.focus();await composer.press('Shift+Enter');
  await expect(sidebar).toHaveAttribute('aria-expanded','true');
  await composer.press('Enter');await page.waitForTimeout(400);await expect(sidebar).toHaveAttribute('aria-expanded','true');
- await addFirst('/c/immersive-first');await expect(sidebar).toHaveAttribute('aria-expanded','false');
- await sidebar.click();await page.evaluate(()=>addTurn(1,'<h2>继续提问</h2>'));
- await expect(ticks).toHaveCount(2);await expect(sidebar).toHaveAttribute('aria-expanded','true');
+ await addFirst('/c/immersive-first');await expect(ticks).toHaveCount(1);await expect(sidebar).toHaveAttribute('aria-expanded','true');
+ await send.click();await page.evaluate(()=>addTurn(1,'<h2>继续提问</h2>'));
+ await expect(ticks).toHaveCount(2);await expect(sidebar).toHaveAttribute('aria-expanded','false');
+ await sidebar.click();
  await send.click();await page.evaluate(()=>addTurn(2,'<h2>历史对话继续提问</h2>'));
  await expect(ticks).toHaveCount(3);await expect(sidebar).toHaveAttribute('aria-expanded','false');
  // Existing messages and answer mutations cannot confirm another successful send.
@@ -57,9 +58,10 @@ module.exports=async function immersiveScenario(page,popup) {
  await expect(ticks).toHaveCount(1);await expect(sidebar).toHaveAttribute('aria-expanded','false');
  await sidebar.click();await page.evaluate(()=>addTurn(1,'<h2>手动展开后继续提问</h2>'));
  await expect(ticks).toHaveCount(2);await expect(sidebar).toHaveAttribute('aria-expanded','true');
- await draft();await send.click();
+ await draft();await send.click();await addFirst('/c/immersive-delayed');await expect(ticks).toHaveCount(1);
+ await send.click();
  await page.evaluate(()=>{window.delayedSidebar=document.querySelector('#native-sidebar-toggle');window.delayedSidebar.remove();});
- await addFirst('/c/immersive-delayed');await expect(ticks).toHaveCount(1);await page.waitForTimeout(400);
+ await page.evaluate(()=>addTurn(1,'<h2>第二条消息</h2>'));await expect(ticks).toHaveCount(2);await page.waitForTimeout(400);
  await page.evaluate(()=>document.body.append(window.delayedSidebar));
  await expect(sidebar).toHaveAttribute('aria-expanded','false');await sidebar.click();
  await draft();await send.click();await popup.locator('#immersiveMode').uncheck();await page.waitForTimeout(400);
@@ -79,8 +81,8 @@ module.exports=async function immersiveScenario(page,popup) {
    thread.innerHTML='<div data-content-search-turn-key="fallback-turn-0"><div data-chatgpt-search-unit-key="fallback-turn-0:0:user" data-chatgpt-search-message-ids="live-user"><div data-user-message-bubble>首条消息</div></div><div data-chatgpt-search-unit-key="fallback-turn-0:2:assistant" data-chatgpt-search-message-ids="live-answer"><div data-markdown-text-style="assistant-message"><h2>回答标题</h2></div></div></div>';
    history.pushState({},'','/c/immersive-live-structure');
  });
- await expect(ticks).toHaveCount(1);await expect(sidebar).toHaveAttribute('aria-expanded','false');
- await sidebar.click();await send.click();await page.waitForTimeout(400);
+ await expect(ticks).toHaveCount(1);await expect(sidebar).toHaveAttribute('aria-expanded','true');
+ await send.click();await page.waitForTimeout(400);
  await expect(sidebar).toHaveAttribute('aria-expanded','true');
  await page.evaluate(()=>{
    const next=document.createElement('div');
