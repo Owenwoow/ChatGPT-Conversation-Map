@@ -115,10 +115,10 @@
   }
   function liveElement(turn) {return turn?.user?.element?.isConnected ? turn.user.element : turn?.assistant?.element?.isConnected ? turn.assistant.element : null;}
   function headings(turn) {return turn?.assistant?.headings || [];}
-  function scrollToElement(element) {
+  function scrollToElement(element, behavior) {
     const root=scrollRoot || document.scrollingElement;
     const top=element.getBoundingClientRect().top - (root===document.scrollingElement ? 0 : root.getBoundingClientRect().top) - 90;
-    root.scrollBy({top,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
+    root.scrollBy({top,behavior});
   }
   function cancelNavigation() {navigation++;targetLock=null;}
   async function navigate(id, headingId) {
@@ -158,7 +158,8 @@
       }
     }
     if(token!==navigation)return;
-    $('.status').hidden=true; scrollToElement(element); schedulePosition();
+    const behavior=headingId&&!motionPreference.matches?'smooth':'instant';
+    $('.status').hidden=true; scrollToElement(element,behavior); schedulePosition();
   }
   function bookmarkPrefix(key) {return `dualNavBookmark:${encodeURIComponent(key)}:`;}
   function bookmarkKey(key, id) {return bookmarkPrefix(key)+encodeURIComponent(id);}

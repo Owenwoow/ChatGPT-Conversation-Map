@@ -73,6 +73,7 @@ function setup() {
     querySelectorAll: () => []
   });
   const window = new Element();
+  const motionPreference = {matches: true, addEventListener() {}};
   let route = '/c/a', current, scans = 0, nextTimer = 0;
   const timers = new Map(), intervals = [], observers = [];
   const messages = ['u1', 'a1', 'u2', 'a2'].map((id, index) => ({
@@ -94,14 +95,14 @@ function setup() {
     DualNav: {adapter, ...model},
     ResizeObserver: class { observe() {} disconnect() {} },
     MutationObserver: class { constructor(callback) { observers.push(callback); } observe() {} disconnect() {} },
-    matchMedia: () => ({matches: true, addEventListener() {}}),
+    matchMedia: () => motionPreference,
     getComputedStyle: () => ({}), innerWidth: 1600, innerHeight: 900,
     setInterval: callback => { intervals.push(callback); return intervals.length; }, clearInterval() {},
     setTimeout: callback => { timers.set(++nextTimer, callback); return nextTimer; }, clearTimeout: id => timers.delete(id),
     requestAnimationFrame: () => 1, cancelAnimationFrame() {}
   });
   return {
-    controls, host, document, window,
+    controls, host, document, window, motionPreference,
     scans: () => scans,
     poll: () => intervals[0](),
     flush: () => { const pending = [...timers.values()]; timers.clear(); for (const callback of pending) callback(); },
@@ -111,6 +112,21 @@ function setup() {
     removeHost: () => { host.remove(); observers[0]([]); }
   };
 }
+
+test('小地图即时跳转，右侧目录按减少动态效果偏好滚动', () => {
+  const page = setup();
+  const behaviors = [];
+  page.document.scrollingElement.scrollBy = ({behavior}) => behaviors.push(behavior);
+  const rail = page.controls.get('.rail'), tree = page.controls.get('.tree');
+
+  page.motionPreference.matches = false;
+  rail.children[0].emit('click');
+  tree.querySelector('.heading').emit('click');
+  page.motionPreference.matches = true;
+  tree.querySelector('.heading').emit('click');
+
+  assert.deepEqual(behaviors, ['instant', 'smooth', 'instant']);
+});
 
 test('后台扫描暂时找不到主体后，切回同一地址恢复小地图及目录', () => {
   const page = setup();
