@@ -5,7 +5,7 @@
   console.info(`[Dual Navigator] starting build ${build}`);
   const {adapter, ConversationStore, buildTree} = globalThis.DualNav;
   const store = new ConversationStore();
-  const defaults = {leftEnabled:true,rightEnabled:true,autoExpand:true,autoCollapse:false,outlineWidth:'auto',immersiveMode:false};
+  const defaults = {leftEnabled:true,rightEnabled:true,autoExpand:true,autoCollapse:false,outlineWidth:'auto',immersiveMode:false,collapseAnalysis:true};
   let settings = {...defaults}, snapshot, turns = [], active = null, activeHeading = null;
   let currentKey = '', manualClosed = false, userClosed = false, compact = false, hovering = false, temporaryOpen = false;
   let wasStreaming = false, treeSignature = null, treeTurnId = null, railSignature = null, frame = 0, timer = 0;
@@ -113,18 +113,40 @@
       element.hidden=!expanded;branchAnimations.delete(element);animation.cancel();
     }).catch(()=>{});
   }
-  const turnOffsets=new Map();
-  const initializedAnalysis=new WeakSet();
+  const turnLocations=new Map();
+  let manualAnalysis=new WeakSet(), foldedAnalysis=new WeakSet();
+  let analysisReady=!hasStorage();
 
-  function collapseAnalysis(main) {
-    for(const control of main.querySelectorAll('button[aria-expanded][aria-labelledby]')) {
-      if(initializedAnalysis.has(control))continue;
-      const label=document.getElementById(control.getAttribute('aria-labelledby'));
-      if(!label || !control.parentElement.contains(label) || !/^(已分析|Analyzed|Analysed)$/i.test(label.textContent.trim()))continue;
-      initializedAnalysis.add(control);
-      if(control.getAttribute('aria-expanded')==='true')control.click();
+  function isAnalysisButton(control) {
+    if(!control || control.closest(adapter.selectors.sidePanel))return false;
+    const labels=(control.getAttribute('aria-labelledby') || '').trim().split(/\s+/);
+    const name=control.getAttribute('aria-label') || labels.map(id=>id && document.getElementById(id)?.textContent).filter(Boolean).join(' ') || control.textContent;
+    return /^(已分析|已分析完毕|Analy[sz]ed)$/i.test(name.trim());
+  }
+  function foldAnalysisButton(control) {
+    if(!analysisReady || !settings.collapseAnalysis || manualAnalysis.has(control) ||
+       control.getAttribute('aria-expanded')!=='true' || !isAnalysisButton(control))return;
+    foldedAnalysis.add(control);
+    control.click();
+  }
+  function syncAnalysisSetting(enabled) {
+    settings.collapseAnalysis=enabled;
+    analysisReady=true;
+    const main=snapshot?.main;
+    if(enabled)main?.querySelectorAll('button[aria-expanded="true"]').forEach(foldAnalysisButton);
+    else {
+      for(const control of main?.querySelectorAll('button[aria-expanded="false"]') || []) {
+        if(foldedAnalysis.has(control) && !manualAnalysis.has(control) && isAnalysisButton(control))control.click();
+      }
+      foldedAnalysis=new WeakSet();
+      manualAnalysis=new WeakSet();
     }
   }
+  document.addEventListener('click',event=>{
+    if(!event.isTrusted || !settings.collapseAnalysis)return;
+    const control=event.target.closest?.('button[aria-expanded]');
+    if(control && snapshot?.main?.contains(control) && isAnalysisButton(control))manualAnalysis.add(control);
+  },{capture:true,signal:lifecycle.signal});
 
   function liveElement(turn) {return turn?.user?.element?.isConnected ? turn.user.element : turn?.assistant?.element?.isConnected ? turn.assistant.element : null;}
   function headings(turn) {return turn?.assistant?.headings || [];}
@@ -134,16 +156,31 @@
     root.scrollBy({top,behavior});
   }
   function cancelNavigation() {navigation++;targetLock=null;}
-  async function navigate(id, headingId) {
+  function jumpToTurn(id) {
+    cancelNavigation();
+    const turn=turns.find(item=>item.id===id);
+    if(!turn)return;
+    const element=liveElement(turn);
+    const location=turnLocations.get(id);
+    const anchor=location?.anchor?.deref();
+    if(anchor?.isConnected)scrollToElement(anchor,'instant');
+    else if(element)scrollToElement(element,'instant');
+    else if(location)scrollRoot.scrollTo({top:location.top,behavior:'instant'});
+    else {notify('这条历史消息尚未加载。');return;}
+    targetLock={id,until:Date.now()+2400};
+    $('.status').hidden=true;
+    schedulePosition();
+  }
+  async function navigateHeading(id, headingId) {
     const token=++navigation;
     let turn=turns.find(t=>t.id===id); if(!turn)return;
     active=turn; targetLock={id,until:Date.now()+2400}; render();
     // Recover only through the page's normal scrolling. Never call private endpoints.
-    let element=headingId ? headings(turn).find(h=>h.id===headingId)?.element : liveElement(turn);
+    let element=headings(turn).find(h=>h.id===headingId)?.element;
     if(!element?.isConnected) {
       notify('正在定位历史消息…');
       const root=scrollRoot, key=currentKey;
-      const top=turnOffsets.get(id);
+      const top=turnLocations.get(id)?.top;
       if(root && top!==undefined) {
         root.scrollTo({top,behavior:'instant'});
         // Let the page mount the destination without paging through the thread.
@@ -153,7 +190,7 @@
           if(wait===0 || wait===7)refresh();
           if(token!==navigation)return;
           turn=turns.find(t=>t.id===id);
-          element=headingId ? headings(turn).find(h=>h.id===headingId)?.element : liveElement(turn);
+          element=headings(turn).find(h=>h.id===headingId)?.element;
           if(element?.isConnected)break;
         }
       }
@@ -162,12 +199,9 @@
       }
     }
     if(token!==navigation)return;
-    const behavior=headingId&&!motionPreference.matches?'smooth':'instant';
+    const behavior=motionPreference.matches?'instant':'smooth';
     $('.status').hidden=true;
     scrollToElement(element,behavior);
-    if(!headingId && !motionPreference.matches) {
-      element.animate?.([{opacity:.84},{opacity:1}],{duration:160,easing:'ease-out'});
-    }
     schedulePosition();
   }
   function bookmarkPrefix(key) {return `dualNavBookmark:${encodeURIComponent(key)}:`;}
@@ -245,7 +279,7 @@
         let tick=existing.get(turn.id);
         existing.delete(turn.id);
         if(!tick) {
-          tick=button('对话','tick',()=>navigate(turn.id));
+          tick=button('对话','tick',()=>jumpToTurn(turn.id));
           tick.dataset.id=turn.id;
           tick.addEventListener('mouseenter',()=>showPreview(turns.find(t=>t.id===turn.id)||turn,tick));
           tick.addEventListener('focus',()=>{
@@ -313,7 +347,7 @@
             children=document.createElement('div');children.id=`dn-branch-${++branchNumber}`;toggle.setAttribute('aria-controls',children.id);
             children.className='children';children.hidden=!expanded;children.inert=!expanded;children.setAttribute('aria-hidden',String(!expanded));
           } else {const spacer=document.createElement('span');spacer.className='leaf';row.append(spacer);}
-          const link=button(node.text,'heading',()=>navigate(active.id,node.id));link.textContent=node.text;link.title=node.text;row.append(link);branch.append(row);
+          const link=button(node.text,'heading',()=>navigateHeading(active.id,node.id));link.textContent=node.text;link.title=node.text;row.append(link);branch.append(row);
           if(node.children.length) {
             append(node.children,children,depth+1);branch.append(children);
           }
@@ -515,7 +549,7 @@
       // A SPA can update its URL while the old conversation is still mounted.
       // Do not mistake that old DOM for virtualized history of the new route.
       routeExclusions=new WeakMap(seenRouteMessages);seenRouteMessages=new Map();
-      turnOffsets.clear();
+      turnLocations.clear();
       currentKey=snapshot.key;store.reset(currentKey);active=null;outlinePreferences.clear();
       manualClosed=false;userClosed=false;temporaryOpen=false;wasStreaming=false;treeSignature=railSignature=null;treeTurnId=null;cancelNavigation();
       nativePanel=null;panelTemporaryOpen=false;
@@ -533,13 +567,16 @@
     for(const message of snapshot.messages)seenRouteMessages.set(message.element,`${message.id}\n${message.text}`);
     turns=store.update(snapshot);
     const nextRoot=snapshot.scrollRoot||document.scrollingElement;
-    if(snapshot.main)collapseAnalysis(snapshot.main);
-    if(nextRoot!==scrollRoot && scrollRoot)turnOffsets.clear();
+    if(analysisReady && settings.collapseAnalysis)snapshot.main?.querySelectorAll('button[aria-expanded="true"]').forEach(foldAnalysisButton);
+    if(nextRoot!==scrollRoot && scrollRoot)turnLocations.clear();
     if(nextRoot!==scrollRoot){scrollRoot?.removeEventListener('scroll',schedulePosition);scrollRoot=nextRoot;scrollRoot?.addEventListener('scroll',schedulePosition,{passive:true,signal:lifecycle.signal});}
     const rootTop=scrollRoot===document.scrollingElement?0:scrollRoot.getBoundingClientRect().top;
     for(const turn of turns) {
       const element=liveElement(turn);
-      if(element)turnOffsets.set(turn.id,scrollRoot.scrollTop+element.getBoundingClientRect().top-rootTop-90);
+      if(!element)continue;
+      const anchor=element.closest('[data-virtualized-turn]');
+      const top=scrollRoot.scrollTop+(anchor || element).getBoundingClientRect().top-rootTop-90;
+      turnLocations.set(turn.id,{anchor:anchor ? new WeakRef(anchor) : null,top});
     }
     if(snapshot.streaming&&!wasStreaming&&settings.autoExpand&&!userClosed){manualClosed=false;}
     wasStreaming=snapshot.streaming;
@@ -648,6 +685,10 @@
       if(record.target===host||host.contains(record.target))continue;
       const target=record.target.nodeType===Node.ELEMENT_NODE?record.target:record.target.parentElement;
       if(!target)continue;
+      if(record.type==='attributes' && record.attributeName==='aria-expanded') {
+        if(target.matches('button') && snapshot?.main?.contains(target))foldAnalysisButton(target);
+        continue;
+      }
       if(record.type==='attributes'&&['role','data-testid','data-summary-panel-variant'].includes(record.attributeName))panelCandidatesDirty=true;
       // Preview streaming and animation affect only geometry, never chat data.
       if(target.closest(adapter.selectors.sidePanel)){needsLayout=true;continue;}
@@ -673,7 +714,7 @@
     if(needsScan)scheduleScan();
     if(needsLayout)scheduleLayout();
   });
-  domObserver.observe(document.documentElement,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class','style','hidden','inert','aria-hidden','role','data-dil-response','data-d-component','data-d-has-border','data-d-size','data-d-tabular-nums','data-summary-panel-variant','data-chatgpt-conversation-selection-target','data-message-author-role','data-message-id','data-chatgpt-search-unit-key','data-chatgpt-search-message-ids','data-markdown-text-style','data-is-streaming','data-testid','data-thread-user-message-navigation-content']});
+  domObserver.observe(document.documentElement,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class','style','hidden','inert','aria-expanded','aria-hidden','role','data-dil-response','data-d-component','data-d-has-border','data-d-size','data-d-tabular-nums','data-summary-panel-variant','data-chatgpt-conversation-selection-target','data-message-author-role','data-message-id','data-chatgpt-search-unit-key','data-chatgpt-search-message-ids','data-markdown-text-style','data-is-streaming','data-testid','data-thread-user-message-navigation-content']});
   themeObserver=new MutationObserver(()=>{if(contextAlive()){theme();scheduleLayout();}});
   themeObserver.observe(document.documentElement,{attributes:true,attributeFilter:['class','data-theme','style']});
   // popstate does not cover pushState from the isolated content-script world.
@@ -683,8 +724,25 @@
   },800);
   if(hasStorage()) {
     try {
-      chrome.storage.local.get(defaults).then(value=>{if(contextAlive()){settings={...defaults,...value};scheduleScan();}}).catch(()=>{contextAlive();});
-      chrome.storage.onChanged.addListener((changes,area)=>{if(!contextAlive()||area!=='local')return;for(const key of Object.keys(defaults))if(changes[key])settings[key]=changes[key].newValue??defaults[key];if(!settings.immersiveMode)cancelImmersive();if(Object.keys(changes).some(key=>key.startsWith(bookmarkPrefix(currentKey))))loadBookmarks(currentKey);scheduleScan();});
+      const changedDuringLoad={};
+      chrome.storage.local.get(defaults).then(value=>{
+        if(!contextAlive())return;
+        settings={...defaults,...value,...changedDuringLoad};
+        syncAnalysisSetting(settings.collapseAnalysis);
+        scheduleScan();
+      }).catch(()=>{contextAlive();});
+      chrome.storage.onChanged.addListener((changes,area)=>{
+        if(!contextAlive() || area!=='local')return;
+        for(const key of Object.keys(defaults)) {
+          if(!changes[key])continue;
+          settings[key]=changes[key].newValue??defaults[key];
+          changedDuringLoad[key]=settings[key];
+        }
+        if(changes.collapseAnalysis)syncAnalysisSetting(settings.collapseAnalysis);
+        if(!settings.immersiveMode)cancelImmersive();
+        if(Object.keys(changes).some(key=>key.startsWith(bookmarkPrefix(currentKey))))loadBookmarks(currentKey);
+        scheduleScan();
+      });
     } catch(error) {if(contextAlive())throw error;}
   }
   refresh();

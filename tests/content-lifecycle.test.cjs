@@ -50,6 +50,7 @@ function setup() {
       this.isConnected = false;
     }
     replaceChildren() { for (const child of [...this.children]) child.remove(); }
+    closest() { return null; }
     contains(element) { return element === this || this.children.some(child => child.contains(element)); }
     matches(selector) { return selector.startsWith('.') && this.classList.contains(selector.slice(1)); }
     querySelectorAll(selector) {
@@ -102,7 +103,7 @@ function setup() {
     requestAnimationFrame: () => 1, cancelAnimationFrame() {}
   });
   return {
-    controls, host, document, window, motionPreference,
+    controls, host, document, window, motionPreference, messages,
     scans: () => scans,
     poll: () => intervals[0](),
     flush: () => { const pending = [...timers.values()]; timers.clear(); for (const callback of pending) callback(); },
@@ -126,6 +127,22 @@ test('小地图即时跳转，右侧目录按减少动态效果偏好滚动', ()
   tree.querySelector('.heading').emit('click');
 
   assert.deepEqual(behaviors, ['instant', 'smooth', 'instant']);
+});
+
+test('小地图对已卸载轮次只写入一次滚动位置，点击时不重扫会话', async () => {
+  const page=setup();
+  page.messages[0].element.isConnected=false;
+  page.messages[1].element.isConnected=false;
+  const scrolls=[];
+  const root=page.document.scrollingElement;
+  root.scrollBy=root.scrollTo=options=>scrolls.push({...options});
+  const scans=page.scans();
+  page.controls.get('.rail').children[0].emit('click');
+  page.messages[0].element.isConnected=true;
+  page.flush();
+  await Promise.resolve();
+  assert.equal(page.scans(),scans);
+  assert.deepEqual(scrolls,[{top:-90,behavior:'instant'}]);
 });
 
 test('后台扫描暂时找不到主体后，切回同一地址恢复小地图及目录', () => {

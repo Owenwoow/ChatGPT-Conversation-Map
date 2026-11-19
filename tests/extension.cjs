@@ -17,6 +17,34 @@ const path=require('node:path');
   const item=manager.locator('extensions-item').filter({hasText:'ChatGPT 对话地图'});
   await expect(item).toHaveCount(1);const id=await item.getAttribute('id');
   let popup=await context.newPage();await popup.goto(`chrome-extension://${id}/popup/index.html`);
+  const analysisSwitch=popup.locator('#collapseAnalysis');
+  await expect(analysisSwitch).toBeChecked();
+  await page.evaluate(()=>{
+    const activity=document.createElement('div');
+    activity.innerHTML='<button type="button" aria-labelledby="analysis-label" aria-expanded="true"></button><span id="analysis-label"><span aria-live="polite">已分析</span></span><pre id="analysis-output">Python</pre>';
+    const button=activity.querySelector('button'), output=activity.querySelector('pre');
+    button.onclick=()=>{
+      output.hidden=button.getAttribute('aria-expanded')==='true';
+      button.setAttribute('aria-expanded',String(!output.hidden));
+    };
+    document.querySelector('main').append(activity);
+  });
+  const analysis=page.getByRole('button',{name:'已分析',exact:true}), output=page.locator('#analysis-output');
+  await expect(output).toBeHidden();
+  // The native page can open an existing disclosure after hydration.
+  await analysis.evaluate(button=>button.click());
+  await expect(output).toBeHidden();
+  await analysisSwitch.uncheck();
+  await expect(output).toBeVisible();
+  await popup.reload();await expect(analysisSwitch).not.toBeChecked();
+  await analysisSwitch.check();
+  await expect(output).toBeHidden();
+  await analysis.focus();await analysis.press('Enter');
+  await expect(output).toBeVisible();
+  await page.evaluate(()=>window.dispatchEvent(new Event('resize')));
+  await page.waitForTimeout(300);
+  await expect(output).toBeVisible();
+  console.log('PASS 分析默认折叠、延迟自动展开、设置开关和手动展开');
   await expect(popup.locator('#leftEnabled')).toBeChecked();
   await popup.locator('#leftEnabled').uncheck();await expect(root.locator('.rail')).toBeHidden();
   await popup.locator('#leftEnabled').check();await expect(root.locator('.rail')).toBeVisible();
