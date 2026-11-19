@@ -113,6 +113,19 @@
       element.hidden=!expanded;branchAnimations.delete(element);animation.cancel();
     }).catch(()=>{});
   }
+  const turnOffsets=new Map();
+  const initializedAnalysis=new WeakSet();
+
+  function collapseAnalysis(main) {
+    for(const control of main.querySelectorAll('button[aria-expanded][aria-labelledby]')) {
+      if(initializedAnalysis.has(control))continue;
+      const label=document.getElementById(control.getAttribute('aria-labelledby'));
+      if(!label || !control.parentElement.contains(label) || !/^(已分析|Analyzed|Analysed)$/i.test(label.textContent.trim()))continue;
+      initializedAnalysis.add(control);
+      if(control.getAttribute('aria-expanded')==='true')control.click();
+    }
+  }
+
   function liveElement(turn) {return turn?.user?.element?.isConnected ? turn.user.element : turn?.assistant?.element?.isConnected ? turn.assistant.element : null;}
   function headings(turn) {return turn?.assistant?.headings || [];}
   function scrollToElement(element, behavior) {
@@ -129,37 +142,33 @@
     let element=headingId ? headings(turn).find(h=>h.id===headingId)?.element : liveElement(turn);
     if(!element?.isConnected) {
       notify('正在定位历史消息…');
-      const originalRoot=scrollRoot, originalTop=scrollRoot?.scrollTop;
-      let previousTop=-1, stalls=0;
-      for(let step=0;step<36 && token===navigation;step++) {
-        if(currentKey!==snapshot.key)break;
-        turn=turns.find(t=>t.id===id); if(!turn)break;
-        element=headingId ? headings(turn).find(h=>h.id===headingId)?.element : liveElement(turn);
-        if(element?.isConnected)break;
-        const visible=turns.filter(t=>liveElement(t));
-        const nearest=visible.reduce((best,t)=>Math.abs(t.ordinal-turn.ordinal)<Math.abs((best?.ordinal??Infinity)-turn.ordinal)?t:best,null);
-        const direction=nearest && nearest.ordinal<turn.ordinal?1:-1;
-        const root=scrollRoot;
-        if(!root)break;
-        root.scrollBy({top:direction*root.clientHeight*.8,behavior:'instant'});
-        await new Promise(resolve=>setTimeout(resolve,120));
-        if(token!==navigation)return;
-        refresh();
-        if(root.scrollTop===previousTop)stalls++;else stalls=0;
-        previousTop=root.scrollTop;
-        if(stalls>5)break;
+      const root=scrollRoot, key=currentKey;
+      const top=turnOffsets.get(id);
+      if(root && top!==undefined) {
+        root.scrollTo({top,behavior:'instant'});
+        // Let the page mount the destination without paging through the thread.
+        for(let wait=0;wait<8;wait++) {
+          await new Promise(resolve=>setTimeout(resolve,150));
+          if(token!==navigation || adapter.getKey()!==key || root!==scrollRoot)return;
+          if(wait===0 || wait===7)refresh();
+          if(token!==navigation)return;
+          turn=turns.find(t=>t.id===id);
+          element=headingId ? headings(turn).find(h=>h.id===headingId)?.element : liveElement(turn);
+          if(element?.isConnected)break;
+        }
       }
-      if(token!==navigation)return;
-      turn=turns.find(t=>t.id===id);
-      element=headingId ? headings(turn).find(h=>h.id===headingId)?.element : liveElement(turn);
       if(!element?.isConnected) {
-        if(originalRoot?.isConnected && typeof originalTop==='number')originalRoot.scrollTop=originalTop;
         targetLock=null;notify('这条历史消息尚未加载，请向该轮附近滚动后重试。');schedulePosition();return;
       }
     }
     if(token!==navigation)return;
     const behavior=headingId&&!motionPreference.matches?'smooth':'instant';
-    $('.status').hidden=true; scrollToElement(element,behavior); schedulePosition();
+    $('.status').hidden=true;
+    scrollToElement(element,behavior);
+    if(!headingId && !motionPreference.matches) {
+      element.animate?.([{opacity:.84},{opacity:1}],{duration:160,easing:'ease-out'});
+    }
+    schedulePosition();
   }
   function bookmarkPrefix(key) {return `dualNavBookmark:${encodeURIComponent(key)}:`;}
   function bookmarkKey(key, id) {return bookmarkPrefix(key)+encodeURIComponent(id);}
@@ -506,6 +515,7 @@
       // A SPA can update its URL while the old conversation is still mounted.
       // Do not mistake that old DOM for virtualized history of the new route.
       routeExclusions=new WeakMap(seenRouteMessages);seenRouteMessages=new Map();
+      turnOffsets.clear();
       currentKey=snapshot.key;store.reset(currentKey);active=null;outlinePreferences.clear();
       manualClosed=false;userClosed=false;temporaryOpen=false;wasStreaming=false;treeSignature=railSignature=null;treeTurnId=null;cancelNavigation();
       nativePanel=null;panelTemporaryOpen=false;
@@ -523,7 +533,14 @@
     for(const message of snapshot.messages)seenRouteMessages.set(message.element,`${message.id}\n${message.text}`);
     turns=store.update(snapshot);
     const nextRoot=snapshot.scrollRoot||document.scrollingElement;
+    if(snapshot.main)collapseAnalysis(snapshot.main);
+    if(nextRoot!==scrollRoot && scrollRoot)turnOffsets.clear();
     if(nextRoot!==scrollRoot){scrollRoot?.removeEventListener('scroll',schedulePosition);scrollRoot=nextRoot;scrollRoot?.addEventListener('scroll',schedulePosition,{passive:true,signal:lifecycle.signal});}
+    const rootTop=scrollRoot===document.scrollingElement?0:scrollRoot.getBoundingClientRect().top;
+    for(const turn of turns) {
+      const element=liveElement(turn);
+      if(element)turnOffsets.set(turn.id,scrollRoot.scrollTop+element.getBoundingClientRect().top-rootTop-90);
+    }
     if(snapshot.streaming&&!wasStreaming&&settings.autoExpand&&!userClosed){manualClosed=false;}
     wasStreaming=snapshot.streaming;
     if(active)active=turns.find(t=>t.id===active.id)||null;
