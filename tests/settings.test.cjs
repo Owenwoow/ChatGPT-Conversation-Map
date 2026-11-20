@@ -53,6 +53,7 @@ function openSettings({language = 'en-US', fallbackLanguage = 'en-US', settings 
 test('设置页跟随浏览器界面语言，中文地区变体使用简体中文，其他语言回退英文', async () => {
   for (const language of ['zh-CN', 'zh-TW', 'zh-HK', 'ZH-cn', 'zh', 'en-US', 'fr-FR']) {
     const page = openSettings({language, fallbackLanguage: language.startsWith('zh') ? 'en-US' : 'zh-CN'});
+    assert.equal(page.status.textContent, /^zh/i.test(language) ? '正在读取设置…' : 'Loading settings…');
     await flush();
     const chinese = /^zh/i.test(language);
     assert.equal(page.document.documentElement.lang, chinese ? 'zh-CN' : 'en');
@@ -60,11 +61,12 @@ test('设置页跟随浏览器界面语言，中文地区变体使用简体中�
     assert.equal(page.input('leftLabel').textContent, chinese ? '对话小地图' : 'Conversation map');
     assert.equal(page.input('blockCopyLabel').textContent, chinese ? '图块复制' : 'Copy content blocks');
     assert.match(page.document.title, chinese ? /设置/ : /Settings/);
-    for (const element of page.elements.filter(element => element.dataset.i18n)) {
+    for (const element of page.elements.filter(element => element.dataset.i18n && element !== page.status)) {
       assert.equal(typeof element.textContent, 'string');
       assert.ok(element.textContent.length, `缺失翻译：${element.dataset.i18n}`);
     }
     assert.equal(page.status.dataset.state, 'ready');
+    assert.equal(page.status.textContent, '');
   }
 });
 
