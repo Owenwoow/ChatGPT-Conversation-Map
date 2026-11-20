@@ -204,23 +204,8 @@ async function blockExportScenario(page,popup) {
   await page.locator('#study-card p').first().hover();await expect(copy).toBeVisible();
   await copy.click();await expect(copy).toHaveAttribute('data-state','success');
   const study=await page.evaluate(()=>navigator.clipboard.readText());
-  const note=await page.context().newPage();
-  try {
-   await note.setContent(`<!doctype html><meta charset="utf-8"><style>body{margin:0;font:20px/1.8 system-ui}</style><main style="width:600px">${study}</main>`);
-   for(const width of [600,320]) {
-    await note.locator('main').evaluate((el,width)=>el.style.width=`${width}px`,width);
-    const layout=await note.locator('main > div').evaluate(card=>{
-     const [words,divider,reading]=card.children;
-     const size=el=>[el.offsetWidth,el.offsetHeight];
-     const style=getComputedStyle(divider);
-     return {cardWidth:card.offsetWidth,rowWidth:words.offsetWidth,icons:[size(words.firstElementChild),size(reading.firstElementChild)],
-      lineWidth:divider.offsetWidth,lineHeight:style.height,lineBoxHeight:divider.offsetHeight,lineClip:style.backgroundClip};
-    });
-    assert.deepEqual(layout,{cardWidth:width,rowWidth:width-26,icons:[[48,48],[48,48]],lineWidth:width-26,lineHeight:'1px',lineBoxHeight:17,lineClip:'content-box'});
-   }
-  } finally {await note.close();}
-  console.log('PASS 导出后图标保持固定尺寸，分隔线留白透明，卡片宽度随阅读容器变化');
 
+  await page.mouse.move(10,70);await expect(host).toBeHidden();
   await page.evaluate(()=>{
    const style=document.createElement('style');
    style.textContent=`
@@ -239,13 +224,29 @@ async function blockExportScenario(page,popup) {
     ${list(item('复测','验证修复。'))}
    </div>`);
   });
-  await page.bringToFront();
-  await page.keyboard.press('Escape');await expect(host).toBeHidden();
   const stepsCard=page.locator('#steps-card');
   await stepsCard.evaluate(card=>card.scrollIntoView({block:'center',behavior:'instant'}));
   await stepsCard.locator('strong').first().hover();await expect(copy).toBeVisible();
   await copy.click();await expect(copy).toHaveAttribute('data-state','success');
   const steps=await page.evaluate(()=>navigator.clipboard.readText());
+
+  const note=await page.context().newPage();
+  try {
+   await note.setContent(`<!doctype html><meta charset="utf-8"><style>body{margin:0;font:20px/1.8 system-ui}</style><main style="width:600px">${study}</main>`);
+   for(const width of [600,320]) {
+    await note.locator('main').evaluate((el,width)=>el.style.width=`${width}px`,width);
+    const layout=await note.locator('main > div').evaluate(card=>{
+     const [words,divider,reading]=card.children;
+     const size=el=>[el.offsetWidth,el.offsetHeight];
+     const style=getComputedStyle(divider);
+     return {cardWidth:card.offsetWidth,rowWidth:words.offsetWidth,icons:[size(words.firstElementChild),size(reading.firstElementChild)],
+      lineWidth:divider.offsetWidth,lineHeight:style.height,lineBoxHeight:divider.offsetHeight,lineClip:style.backgroundClip};
+    });
+    assert.deepEqual(layout,{cardWidth:width,rowWidth:width-26,icons:[[48,48],[48,48]],lineWidth:width-26,lineHeight:'1px',lineBoxHeight:17,lineClip:'content-box'});
+   }
+  } finally {await note.close();}
+  console.log('PASS 导出后图标保持固定尺寸，分隔线留白透明，卡片宽度随阅读容器变化');
+
   const stepsNote=await page.context().newPage();
   try {
    await stepsNote.setContent(`<!doctype html><meta charset="utf-8"><main style="width:600px">${steps}</main>`);
