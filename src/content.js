@@ -796,6 +796,13 @@
     }
   },{capture:true,signal:lifecycle.signal});
   document.addEventListener('click',e=>{
+    if (e.isTrusted && e.button === 0 && e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey &&
+        extensionRuntime && contextAlive() && adapter.isNewChatControl(e.target)) {
+      chrome.runtime.sendMessage('open-new-chat');
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      return;
+    }
     if(e.target.closest?.(adapter.selectors.sidebarControl))cancelImmersive();
     if(adapter.isSendButton(e.target)){draftSendAt=Date.now();explicitNavigation=false;noteSend();}
     const href=e.target.closest?.('a[href]')?.href;

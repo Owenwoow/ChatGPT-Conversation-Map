@@ -14,6 +14,8 @@ const path=require('node:path');
   await page.goto('https://chatgpt.com/c/extension-test');
   const root=page.locator('#dual-navigator-host');await expect(root.locator('.tick')).toHaveCount(8);
   console.log('PASS Manifest V3 真实加载及声明式脚本注入');
+  const newChatPage=await context.newPage();
+  try {await require('./new-chat-scenario.cjs')(newChatPage);} finally {await newChatPage.close();}
   const manager=await context.newPage();
   await manager.goto(channel==='msedge'?'edge://extensions/':'chrome://extensions/');
   const installed=await manager.evaluate(()=>new Promise(resolve=>{

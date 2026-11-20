@@ -1,0 +1,8 @@
+/* ChatGPT uses the same radius for the divider, the main pane and its clip. */
+[data-app-shell-frame] {
+  --app-shell-window-radius: 0px !important;
+}
+
+[data-app-shell-workspace] {
+  --app-shell-rail-corner-radius: 0px !important;
+}

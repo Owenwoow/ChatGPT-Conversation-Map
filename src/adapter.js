@@ -191,13 +191,22 @@
   function isSendButton(element) {
     return !!element?.closest?.('[data-testid="send-button"], [data-testid="composer-submit-button"], button[aria-label="Send prompt"], button[aria-label="发送提示"], button[aria-label="发送"]');
   }
+  function isNewChatControl(element) {
+    const control = element?.closest?.('button, a, [role="button"], [role="link"]');
+    if (!control || control.closest(SELECTORS.message) || control.matches(':disabled, [aria-disabled="true"]')) return false;
+    if (control.matches('[data-testid="create-new-chat-button"], [data-testid="new-chat-button"]')) return true;
+    if (control.matches('a[href]') && control.pathname !== '/') return false;
+    const nav = control.closest('header, nav, aside, [role="navigation"], #app-shell-sidebar, [data-app-shell-page-header], [data-app-shell-header-toolbar], [data-app-shell-titlebar]');
+    const label = control.getAttribute('aria-label') || control.title || (nav && control.textContent);
+    return !!label && /^(?:(?:发起|开启)?新(?:聊天|对话|写作)|新建(?:聊天|对话)|new (?:chat|thread))(?:$|\s*(?:[（(]|Ctrl|⌘))/i.test(label.trim());
+  }
   function sidebarState() {
     const buttons=Array.from(document.querySelectorAll(SELECTORS.sidebarTrigger)).filter(isVisible);
     const open=buttons.find(button=>button.getAttribute('aria-expanded')==='true' && !button.disabled);
     if(open)return {open:true,button:open};
     return buttons.some(button=>button.getAttribute('aria-expanded')==='false')?{open:false,button:null}:null;
   }
-  ns.adapter = { scan, getKey, isDraftKey, getScrollRoot, getContentRect, getRightPanel, isComposer, isSendButton, sidebarState, selectors: SELECTORS };
+  ns.adapter = { scan, getKey, isDraftKey, getScrollRoot, getContentRect, getRightPanel, isComposer, isSendButton, isNewChatControl, sidebarState, selectors: SELECTORS };
   // Direct aliases keep consumers independent of the adapter's internal organization.
   ns.scan = scan;
   ns.getScrollRoot = getScrollRoot;
