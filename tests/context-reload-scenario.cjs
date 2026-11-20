@@ -3,12 +3,12 @@ const {expect}=require('@playwright/test');
 async function reloadExtension(page,popup) {
  const url=popup.url();
  const identity=await popup.evaluate(()=>({id:chrome.runtime.id,version:chrome.runtime.getManifest().version}));
- await popup.evaluate(()=>chrome.runtime.reload());
- // runtime.reload() returns before the replacement extension has finished
- // registering its content scripts. Wait for a fresh extension page/API,
- // rather than refreshing the conversation against an unloaded extension.
  const readyPopup=await page.context().newPage();
  try {
+  // Complete the browser evaluation before reload destroys the old popup.
+  await popup.evaluate(()=>{setTimeout(()=>chrome.runtime.reload(),0);});
+  await expect.poll(()=>popup.isClosed(),{timeout:15000,message:'等待旧版扩展弹窗关闭'}).toBe(true);
+  // Wait for the replacement extension to register its content scripts.
   await expect.poll(async()=>{
    try {
     await readyPopup.goto(url,{waitUntil:'domcontentloaded',timeout:2000});
