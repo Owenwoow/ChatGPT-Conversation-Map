@@ -24,6 +24,8 @@ jobs:
       - run: npm run test:browser
       - run: npm run test:extension
         timeout-minutes: 10
+        env:
+          EXTENSION_TEST_BROWSER: msedge
       - name: 检查版本一致性
         shell: pwsh
         run: |

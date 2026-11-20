@@ -5,17 +5,25 @@ const path=require('node:path');
  const dir=path.resolve(__dirname,'..');
  await fs.mkdir(path.join(dir,'artifacts'),{recursive:true});
  const profile=await fs.mkdtemp(path.join(dir,'artifacts/profile-'));
+ const channel=process.env.EXTENSION_TEST_BROWSER ?? 'chromium';
  let context;
  try {
-  context=await chromium.launchPersistentContext(profile,{headless:true,channel:'chromium',viewport:{width:1600,height:1000},args:[`--disable-extensions-except=${dir}`,`--load-extension=${dir}`]});
+  context=await chromium.launchPersistentContext(profile,{headless:true,channel,viewport:{width:1600,height:1000},args:[`--disable-extensions-except=${dir}`,`--load-extension=${dir}`]});
   const page=await context.newPage();
   await context.route('https://chatgpt.com/**',route=>route.fulfill({path:path.join(__dirname,'fixture.html'),contentType:'text/html'}));
   await page.goto('https://chatgpt.com/c/extension-test');
   const root=page.locator('#dual-navigator-host');await expect(root.locator('.tick')).toHaveCount(8);
   console.log('PASS Manifest V3 真实加载及声明式脚本注入');
-  const manager=await context.newPage();await manager.goto('chrome://extensions');
-  const item=manager.locator('extensions-item').filter({hasText:'ChatGPT 对话地图'});
-  await expect(item).toHaveCount(1);const id=await item.getAttribute('id');
+  const manager=await context.newPage();
+  await manager.goto(channel==='msedge'?'edge://extensions/':'chrome://extensions/');
+  const installed=await manager.evaluate(()=>new Promise(resolve=>{
+   chrome.developerPrivate.getExtensionsInfo({includeDisabled:false,includeTerminated:false},extensions=>{
+    resolve(extensions.filter(extension=>extension.name==='ChatGPT 对话地图'));
+   });
+  }));
+  expect(installed).toHaveLength(1);
+  expect(installed[0].state).toBe('ENABLED');
+  const {id}=installed[0];
   let popup=await context.newPage();await popup.goto(`chrome-extension://${id}/popup/index.html`);
   const analysisSwitch=popup.locator('#collapseAnalysis');
   await expect(analysisSwitch).toBeChecked();
