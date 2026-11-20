@@ -239,7 +239,11 @@ async function blockExportScenario(page,popup) {
     ${list(item('复测','验证修复。'))}
    </div>`);
   });
-  await page.locator('#steps-card strong').first().hover();await expect(copy).toBeVisible();
+  await page.bringToFront();
+  await page.keyboard.press('Escape');await expect(host).toBeHidden();
+  const stepsCard=page.locator('#steps-card');
+  await stepsCard.evaluate(card=>card.scrollIntoView({block:'center',behavior:'instant'}));
+  await stepsCard.locator('strong').first().hover();await expect(copy).toBeVisible();
   await copy.click();await expect(copy).toHaveAttribute('data-state','success');
   const steps=await page.evaluate(()=>navigator.clipboard.readText());
   const stepsNote=await page.context().newPage();
