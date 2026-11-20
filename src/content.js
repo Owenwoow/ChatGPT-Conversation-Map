@@ -149,26 +149,72 @@
   },{capture:true,signal:lifecycle.signal});
 
   function liveElement(turn) {return turn?.user?.element?.isConnected ? turn.user.element : turn?.assistant?.element?.isConnected ? turn.assistant.element : null;}
-  function headings(turn) {return turn?.assistant?.headings || [];}
-  function scrollToElement(element, behavior) {
-    const root=scrollRoot || document.scrollingElement;
-    const top=element.getBoundingClientRect().top - (root===document.scrollingElement ? 0 : root.getBoundingClientRect().top) - 90;
-    root.scrollBy({top,behavior});
+  function questionElement(turn) {
+    if(!turn?.user)return liveElement(turn);
+    const user=turn.user.element;
+    return user?.isConnected ? user.querySelector(adapter.selectors.userBody) || user : null;
   }
-  function cancelNavigation() {navigation++;targetLock=null;}
+  function headings(turn) {return turn?.assistant?.headings || [];}
+  function scrollDistance(element) {
+    const root=scrollRoot || document.scrollingElement;
+    return element.getBoundingClientRect().top - (root===document.scrollingElement ? 0 : root.getBoundingClientRect().top) - 90;
+  }
+  function scrollToElement(element, behavior) {
+    (scrollRoot || document.scrollingElement).scrollBy({top:scrollDistance(element),behavior});
+  }
+  let alignmentTimer=0, missingQuestionTimer=0;
+  function cancelNavigation() {
+    navigation++;targetLock=null;
+    clearTimeout(alignmentTimer);clearTimeout(missingQuestionTimer);
+  }
+  function remainingDistance(element) {
+    const top=scrollRoot.scrollTop;
+    const max=Math.max(0,scrollRoot.scrollHeight-scrollRoot.clientHeight);
+    return Math.min(max,Math.max(0,top+scrollDistance(element)))-top;
+  }
+  function checkQuestionAlignment() {
+    const lock=targetLock;
+    if(!lock?.question || Date.now()>=lock.until)return false;
+    const element=questionElement(turns.find(turn=>turn.id===lock.id));
+    if(!element)return false;
+    if(Math.abs(remainingDistance(element))<=1)return true;
+    if(!lock.corrected) {
+      clearTimeout(alignmentTimer);
+      alignmentTimer=setTimeout(()=>{
+        if(targetLock!==lock || Date.now()>=lock.until || adapter.getKey()!==currentKey)return;
+        const target=questionElement(turns.find(turn=>turn.id===lock.id));
+        if(!target)return;
+        const delta=remainingDistance(target);
+        if(Math.abs(delta)>1) {
+          lock.corrected=true;
+          scrollRoot.scrollBy({top:delta,behavior:'instant'});
+          schedulePosition();
+        }
+      },120);
+    }
+    return false;
+  }
   function jumpToTurn(id) {
     cancelNavigation();
     const turn=turns.find(item=>item.id===id);
     if(!turn)return;
-    const element=liveElement(turn);
+    const element=questionElement(turn);
     const location=turnLocations.get(id);
-    const anchor=location?.anchor?.deref();
-    if(anchor?.isConnected)scrollToElement(anchor,'instant');
-    else if(element)scrollToElement(element,'instant');
-    else if(location)scrollRoot.scrollTo({top:location.top,behavior:'instant'});
-    else {notify('这条历史消息尚未加载。');return;}
-    targetLock={id,until:Date.now()+2400};
+    if(element)scrollToElement(element,'instant');
+    else if(location) {
+      // A cached coordinate only brings the virtualizer near the question.
+      const anchor=location.anchor?.deref();
+      const top=anchor?.isConnected ? scrollRoot.scrollTop+scrollDistance(anchor)+location.inset : location.top;
+      scrollRoot.scrollTo({top,behavior:'instant'});
+    } else {notify('这条历史消息尚未加载。');return;}
+    const lock={id,question:true,until:Date.now()+2400,corrected:false};
+    targetLock=lock;
     $('.status').hidden=true;
+    if(!element)missingQuestionTimer=setTimeout(()=>{
+      if(targetLock===lock && !questionElement(turns.find(item=>item.id===id))) {
+        targetLock=null;notify('这条提问尚未加载，请稍后重试。');schedulePosition();
+      }
+    },2350);
     schedulePosition();
   }
   async function navigateHeading(id, headingId) {
@@ -462,17 +508,17 @@
     opener.style.left=`${rightEdge-rightInset-30}px`;opener.style.top='100px';
   }
   function updateActive() {
-    if(targetLock && Date.now()<targetLock.until) {
+    if(targetLock && Date.now()<targetLock.until && (!targetLock.question || checkQuestionAlignment())) {
       active=turns.find(t=>t.id===targetLock.id)||active;
     } else {
-      targetLock=null;
+      if(targetLock && Date.now()>=targetLock.until)targetLock=null;
       const rootTop=scrollRoot===document.scrollingElement?0:scrollRoot?.getBoundingClientRect().top||0;
       let selected=null;
       for(const turn of turns) {
         // The user question selects its corresponding answer before that answer enters view.
-        const el=liveElement(turn);if(!el)continue;
+        const el=questionElement(turn) || liveElement(turn);if(!el)continue;
         const r=el.getBoundingClientRect();
-        if(r.top<=rootTop+160)selected=turn;
+        if(r.top<=rootTop+91)selected=turn;
         else if(!selected){selected=turn;break;}else break;
       }
       if(selected)active=selected;
@@ -480,7 +526,7 @@
     render();
   }
   function schedulePosition(){if(contextAlive()&&!frame)frame=requestAnimationFrame(()=>{frame=0;if(contextAlive())updateActive();});}
-  function scheduleLayout(){if(contextAlive()&&!layoutFrame)layoutFrame=requestAnimationFrame(()=>{layoutFrame=0;if(contextAlive())position();});}
+  function scheduleLayout(){if(contextAlive()&&!layoutFrame)layoutFrame=requestAnimationFrame(()=>{layoutFrame=0;if(contextAlive()){position();checkQuestionAlignment();}});}
   function theme() {
     const dark=document.documentElement.classList.contains('dark') || document.documentElement.dataset.theme==='dark' || getComputedStyle(document.documentElement).colorScheme==='dark';
     host.style.setProperty('--dn-bg',dark?'#212121':'#fff');
@@ -572,11 +618,13 @@
     if(nextRoot!==scrollRoot){scrollRoot?.removeEventListener('scroll',schedulePosition);scrollRoot=nextRoot;scrollRoot?.addEventListener('scroll',schedulePosition,{passive:true,signal:lifecycle.signal});}
     const rootTop=scrollRoot===document.scrollingElement?0:scrollRoot.getBoundingClientRect().top;
     for(const turn of turns) {
-      const element=liveElement(turn);
+      const element=questionElement(turn);
       if(!element)continue;
       const anchor=element.closest('[data-virtualized-turn]');
-      const top=scrollRoot.scrollTop+(anchor || element).getBoundingClientRect().top-rootTop-90;
-      turnLocations.set(turn.id,{anchor:anchor ? new WeakRef(anchor) : null,top});
+      const questionTop=element.getBoundingClientRect().top;
+      const top=scrollRoot.scrollTop+questionTop-rootTop-90;
+      const inset=anchor ? questionTop-anchor.getBoundingClientRect().top : 0;
+      turnLocations.set(turn.id,{anchor:anchor ? new WeakRef(anchor) : null,inset,top});
     }
     if(snapshot.streaming&&!wasStreaming&&settings.autoExpand&&!userClosed){manualClosed=false;}
     wasStreaming=snapshot.streaming;
@@ -651,6 +699,9 @@
   document.addEventListener('visibilitychange',resumePage,{signal:lifecycle.signal});
   window.addEventListener('pageshow',resumePage,{signal:lifecycle.signal});
   window.addEventListener('focus',resumePage,{signal:lifecycle.signal});
+  window.addEventListener('pointerdown',()=>{
+    if(targetLock?.question)cancelNavigation();
+  },{passive:true,capture:true,signal:lifecycle.signal});
   window.addEventListener('wheel',cancelNavigation,{passive:true,signal:lifecycle.signal});
   window.addEventListener('touchstart',cancelNavigation,{passive:true,signal:lifecycle.signal});
   window.addEventListener('keydown',e=>{
