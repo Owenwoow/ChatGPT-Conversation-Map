@@ -121,7 +121,7 @@
     if(!control || control.closest(adapter.selectors.sidePanel))return false;
     const labels=(control.getAttribute('aria-labelledby') || '').trim().split(/\s+/);
     const name=control.getAttribute('aria-label') || labels.map(id=>id && document.getElementById(id)?.textContent).filter(Boolean).join(' ') || control.textContent;
-    return /^(已分析|已分析完毕|Analy[sz]ed)$/i.test(name.trim());
+    return /^(已分析|已分析完毕|分析已暂停|分析出错|Analy[sz]ed|Analysis paused|Analysis error(?:ed)?)$/i.test(name.trim());
   }
   function foldAnalysisButton(control) {
     if(!analysisReady || !settings.collapseAnalysis || manualAnalysis.has(control) ||
