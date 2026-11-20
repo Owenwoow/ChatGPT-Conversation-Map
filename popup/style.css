@@ -121,6 +121,8 @@ select {
 footer { flex-shrink: 0; padding: 0 22px 16px; }
 #status { min-height: 17px; color: var(--muted); font-size: 11px; }
 #status[data-state="error"] { color: var(--error); }
+.release-info { margin-top: 4px; color: var(--muted); font-size: 11px; }
+.release-info a { color: inherit; text-underline-offset: 2px; }
 
 @media (prefers-color-scheme: dark) {
   :root {

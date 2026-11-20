@@ -39,6 +39,7 @@ function openSettings({language = 'en-US', fallbackLanguage = 'en-US', settings 
   };
   const writes = [];
   const chrome = {
+    runtime: {getManifest: () => ({version: '2.4.10'})},
     i18n: language === null ? undefined : {getUILanguage: () => language},
     storage: {local: {
       get: get || (async defaults => ({...defaults, ...settings})),
@@ -55,6 +56,7 @@ test('设置页跟随浏览器界面语言，中文地区变体使用简体中�
     await flush();
     const chinese = /^zh/i.test(language);
     assert.equal(page.document.documentElement.lang, chinese ? 'zh-CN' : 'en');
+    assert.equal(page.input('installedVersion').textContent, 'v2.4.10');
     assert.equal(page.input('leftLabel').textContent, chinese ? '对话小地图' : 'Conversation map');
     assert.equal(page.input('blockCopyLabel').textContent, chinese ? '图块复制' : 'Copy content blocks');
     assert.match(page.document.title, chinese ? /设置/ : /Settings/);

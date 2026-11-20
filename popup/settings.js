@@ -29,6 +29,8 @@
       toolsTitle: 'Content tools',
       blockCopyLabel: 'Copy content blocks',
       blockCopyHint: 'Show a copy button on static diagrams and cards.',
+      currentVersion: 'Current version',
+      latestRelease: 'View latest release',
       loading: 'Loading settings…',
       ready: 'Changes save automatically and apply immediately.',
       saving: 'Saving…',
@@ -64,6 +66,8 @@
       toolsTitle: '内容工具',
       blockCopyLabel: '图块复制',
       blockCopyHint: '悬停静态图表或卡片时显示复制按钮',
+      currentVersion: '当前版本',
+      latestRelease: '查看最新版',
       loading: '正在读取设置…',
       ready: '设置自动保存，即时生效',
       saving: '正在保存…',
@@ -83,6 +87,7 @@
   }
 
   const status = document.getElementById('status');
+  document.getElementById('installedVersion').textContent = `v${chrome.runtime.getManifest().version}`;
   const controls = Object.keys(defaults).map(key => document.getElementById(key));
   const persisted = {...defaults};
   const latestChanges = new Map();

@@ -41,7 +41,7 @@ Works with **Chrome and Edge** browsers that support Manifest V3 extensions. No 
 3. Enable **Developer mode**, select **Load unpacked**, and choose the folder containing `manifest.json`.
 4. Open or refresh [ChatGPT](https://chatgpt.com/) and visit a multi-turn conversation longer than one screen. Pin the extension icon for easy access to settings.
 
-> **Updating:** Replace the files in the folder actually loaded by your browser, reload the extension on the extensions page, then refresh existing ChatGPT tabs. Check the extension details for its loaded source if you are unsure which folder is in use.
+> **Updating:** Click “View latest release” at the bottom of settings and compare the release version with your installed version. To update, download the new extension ZIP and replace the files in the original folder, keeping `manifest.json` at the same path. Reload the extension on the extensions page, then refresh existing ChatGPT tabs. Check the extension details for its loaded source if you are unsure which folder is in use.
 
 ## Settings
 
