@@ -198,7 +198,7 @@
     if (control.matches('a[href]') && control.pathname !== '/') return false;
     const nav = control.closest('header, nav, aside, [role="navigation"], #app-shell-sidebar, [data-app-shell-page-header], [data-app-shell-header-toolbar], [data-app-shell-titlebar]');
     const label = control.getAttribute('aria-label') || control.title || (nav && control.textContent);
-    return !!label && /^(?:(?:发起|开启)?新(?:聊天|对话|写作)|新建(?:聊天|对话)|new (?:chat|thread))(?:$|\s*(?:[（(]|Ctrl|⌘))/i.test(label.trim());
+    return !!label && /^(?:(?:发起|开启)?新(?:聊天|对话|会话|写作)|新建(?:聊天|对话|会话)|new (?:chat|thread|conversation))(?:$|\s*(?:[（(]|Ctrl|⌘))/i.test(label.trim());
   }
   function sidebarState() {
     const buttons=Array.from(document.querySelectorAll(SELECTORS.sidebarTrigger)).filter(isVisible);

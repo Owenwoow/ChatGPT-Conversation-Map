@@ -5,6 +5,6 @@ chrome.runtime.onMessage.addListener((message, sender) => {
     url: 'https://chatgpt.com/',
     windowId: sender.tab.windowId,
     openerTabId: sender.tab.id,
-    active: false
+    active: true
   });
 });

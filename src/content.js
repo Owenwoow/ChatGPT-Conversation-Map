@@ -795,14 +795,15 @@
       if(!nativePanel||inside){manualClosed=true;userClosed=true;temporaryOpen=false;panelTemporaryOpen=false;position();if(inside&&!opener.hidden)opener.focus({preventScroll:true});}
     }
   },{capture:true,signal:lifecycle.signal});
-  document.addEventListener('click',e=>{
+  window.addEventListener('click',e=>{
     if (e.isTrusted && e.button === 0 && e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey &&
         extensionRuntime && contextAlive() && adapter.isNewChatControl(e.target)) {
-      chrome.runtime.sendMessage('open-new-chat');
       e.preventDefault();
       e.stopImmediatePropagation();
-      return;
+      chrome.runtime.sendMessage('open-new-chat');
     }
+  },{capture:true,signal:lifecycle.signal});
+  document.addEventListener('click',e=>{
     if(e.target.closest?.(adapter.selectors.sidebarControl))cancelImmersive();
     if(adapter.isSendButton(e.target)){draftSendAt=Date.now();explicitNavigation=false;noteSend();}
     const href=e.target.closest?.('a[href]')?.href;
