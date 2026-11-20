@@ -58,6 +58,7 @@ function setup() {
     }
     querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
     getBoundingClientRect() { return {left: 0, right: 1600, top: 0, bottom: 900, width: 1600, height: 900}; }
+    getClientRects() { return [this.getBoundingClientRect()]; }
     focus() {}
   }
 
@@ -82,6 +83,11 @@ function setup() {
     element: new Element(),
     headings: index % 2 ? [{id: `${id}:h`, level: 2, text: `${id}目录`, element: new Element()}] : []
   }));
+  for(const message of messages) {
+    message.element.setAttribute('data-message-author-role',message.role);
+    message.element.setAttribute('data-message-id',message.id);
+    main.append(message.element);
+  }
   const liveSnapshot = key => ({key, main, messages, scrollRoot: document.scrollingElement, streaming: false, routeConfirmed: true});
   current = liveSnapshot(route);
   const adapter = {
@@ -92,7 +98,7 @@ function setup() {
     getRightPanel: () => null
   };
   vm.runInNewContext(source, {
-    document, window, AbortController, console: {info() {}},
+    document, window, CSS: {escape: id=>id}, AbortController, console: {info() {}},
     DualNav: {adapter, ...model},
     ResizeObserver: class { observe() {} disconnect() {} },
     MutationObserver: class { constructor(callback) { observers.push(callback); } observe() {} disconnect() {} },

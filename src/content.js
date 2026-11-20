@@ -6,7 +6,7 @@
   const {adapter, ConversationStore, buildTree} = globalThis.DualNav;
   const store = new ConversationStore();
   const defaults = {leftEnabled:true,rightEnabled:true,autoExpand:true,autoCollapse:false,outlineWidth:'auto',immersiveMode:false,collapseAnalysis:true};
-  let settings = {...defaults}, snapshot, turns = [], active = null, activeHeading = null;
+  let settings = {...defaults}, snapshot, turns = [], questionTurns = [], active = null, activeHeading = null;
   let currentKey = '', manualClosed = false, userClosed = false, compact = false, hovering = false, temporaryOpen = false;
   let wasStreaming = false, treeSignature = null, treeTurnId = null, railSignature = null, frame = 0, timer = 0;
   let navigation = 0, targetLock = null, scrollRoot = null, closeTimer = 0;
@@ -150,9 +150,27 @@
 
   function liveElement(turn) {return turn?.user?.element?.isConnected ? turn.user.element : turn?.assistant?.element?.isConnected ? turn.assistant.element : null;}
   function questionElement(turn) {
-    if(!turn?.user)return liveElement(turn);
-    const user=turn.user.element;
-    return user?.isConnected ? user.querySelector(adapter.selectors.userBody) || user : null;
+    const message=turn?.user, user=message?.element;
+    if(!user?.isConnected || !snapshot.main?.contains(user))return null;
+    const id=user.getAttribute('data-message-id') || user.getAttribute('data-chatgpt-search-message-ids')?.trim().split(/\s+/)[0];
+    if(id && id!==message.id)return null;
+    const unit=user.getAttribute('data-chatgpt-search-unit-key');
+    if(unit && unit!==message.slotId)return null;
+    const role=user.getAttribute('data-message-author-role');
+    if(role!=='user' && !unit?.endsWith(':user'))return null;
+    return user.querySelector(adapter.selectors.userBody) || user;
+  }
+  function mountedQuestion(turn) {
+    const cached=questionElement(turn);
+    if(cached?.getClientRects().length)return cached;
+    // React may have replaced the node since the last debounced scan.
+    const id=CSS.escape(turn.id);
+    const selector=`[data-message-author-role="user"][data-message-id="${id}"],[data-chatgpt-search-unit-key$=":user"][data-chatgpt-search-message-ids~="${id}"],[data-chatgpt-search-unit-key="${id}"]`;
+    const found=snapshot.main?.querySelector(selector);
+    if(found && !found.closest(adapter.selectors.sidePanel) && !found.parentElement?.closest(adapter.selectors.message) && found.getClientRects().length) {
+      return found.querySelector(adapter.selectors.userBody) || found;
+    }
+    return null;
   }
   function headings(turn) {return turn?.assistant?.headings || [];}
   function scrollDistance(element) {
@@ -175,14 +193,29 @@
   function checkQuestionAlignment() {
     const lock=targetLock;
     if(!lock?.question || Date.now()>=lock.until)return false;
-    const element=questionElement(turns.find(turn=>turn.id===lock.id));
-    if(!element)return false;
-    if(Math.abs(remainingDistance(element))<=1)return true;
+    const turn=questionTurns.find(turn=>turn.id===lock.id);
+    if(!turn)return false;
+    const element=mountedQuestion(turn);
+    if(!element) {
+      // The first seek can load a different virtual window and reveal a large
+      // adjustment (e.g. older history was prepended). Use that evidence once.
+      const revised=turnLocations.get(lock.id)?.top;
+      if(lock.seekTop!=null && Number.isFinite(revised) && Math.abs(revised-lock.seekTop)>scrollRoot.clientHeight) {
+        lock.seekTop=null;
+        scrollRoot.scrollTo({top:revised,behavior:'instant'});
+      }
+      return false;
+    }
+    lock.seekTop=null;
+    if(Math.abs(remainingDistance(element))<=1) {
+      clearTimeout(missingQuestionTimer);
+      $('.status').hidden=true;return true;
+    }
     if(!lock.corrected) {
       clearTimeout(alignmentTimer);
       alignmentTimer=setTimeout(()=>{
         if(targetLock!==lock || Date.now()>=lock.until || adapter.getKey()!==currentKey)return;
-        const target=questionElement(turns.find(turn=>turn.id===lock.id));
+        const target=mountedQuestion(turn);
         if(!target)return;
         const delta=remainingDistance(target);
         if(Math.abs(delta)>1) {
@@ -194,27 +227,75 @@
     }
     return false;
   }
+  function measureQuestionLocations() {
+    const measured=new Map(), boundaries=[];
+    const rootOffset=scrollRoot.scrollTop-(scrollRoot===document.scrollingElement?0:scrollRoot.getBoundingClientRect().top)-90;
+    for(const turn of questionTurns) {
+      const question=questionElement(turn);
+      if(!question)continue;
+      const questionTop=question.getBoundingClientRect().top;
+      const top=rootOffset+questionTop;
+      const wrapper=question.closest('[data-virtualized-turn]');
+      const end=wrapper ? rootOffset+wrapper.getBoundingClientRect().bottom : top;
+      const previous=turnLocations.get(turn.id);
+      if(previous) {
+        boundaries.push({before:previous.top,after:top});
+        if(previous.end>previous.top)boundaries.push({before:previous.end,after:end});
+      }
+      measured.set(turn.id,{top,end});
+    }
+    // Prepending history and resizing an analysis panel move unloaded rows too.
+    // Map their old offsets between the nearest measured boundaries.
+    if(boundaries.some(point=>Math.abs(point.after-point.before)>1)) {
+      boundaries.sort((a,b)=>a.before-b.before);
+      for(const [id,location] of turnLocations) {
+        if(measured.has(id))continue;
+        let left=0,right=boundaries.length;
+        while(left<right) {
+          const mid=Math.floor((left+right)/2);
+          if(boundaries[mid].before<location.top)left=mid+1;else right=mid;
+        }
+        const lower=boundaries[Math.max(0,left-1)], upper=boundaries[Math.min(left,boundaries.length-1)];
+        const fraction=upper.before===lower.before ? 0 : (location.top-lower.before)/(upper.before-lower.before);
+        const shift=(1-fraction)*(lower.after-lower.before)+fraction*(upper.after-upper.before);
+        location.top+=shift;location.end+=shift;
+      }
+    }
+    for(const [id,location] of measured)turnLocations.set(id,location);
+  }
   function jumpToTurn(id) {
     cancelNavigation();
-    const turn=turns.find(item=>item.id===id);
-    if(!turn)return;
-    const element=questionElement(turn);
-    const location=turnLocations.get(id);
+    const turn=questionTurns.find(item=>item.id===id);
+    if(!turn || !snapshot.main)return;
+    const element=mountedQuestion(turn);
+    const root=scrollRoot, key=currentKey, originalTop=root.scrollTop;
     if(element)scrollToElement(element,'instant');
-    else if(location) {
-      // A cached coordinate only brings the virtualizer near the question.
-      const anchor=location.anchor?.deref();
-      const top=anchor?.isConnected ? scrollRoot.scrollTop+scrollDistance(anchor)+location.inset : location.top;
-      scrollRoot.scrollTo({top,behavior:'instant'});
-    } else {notify('这条历史消息尚未加载。');return;}
-    const lock={id,question:true,until:Date.now()+2400,corrected:false};
+    else {
+      measureQuestionLocations();
+      const location=turnLocations.get(id);
+      if(!location){notify('这条提问尚未加载。');return;}
+      root.scrollTo({top:location.top,behavior:'instant'});
+    }
+    const lock={id,question:true,seekTop:element?null:turnLocations.get(id).top,until:Date.now()+(element?2400:5000),corrected:false};
     targetLock=lock;
-    $('.status').hidden=true;
-    if(!element)missingQuestionTimer=setTimeout(()=>{
-      if(targetLock===lock && !questionElement(turns.find(item=>item.id===id))) {
-        targetLock=null;notify('这条提问尚未加载，请稍后重试。');schedulePosition();
-      }
-    },2350);
+    if(element)$('.status').hidden=true;
+    else {
+      notify('正在定位提问…');
+      missingQuestionTimer=setTimeout(()=>{
+        if(targetLock!==lock || root!==scrollRoot || adapter.getKey()!==key)return;
+        const target=mountedQuestion(turn);
+        if(target) {
+          const delta=remainingDistance(target);
+          if(Math.abs(delta)>1)root.scrollBy({top:delta,behavior:'instant'});
+          $('.status').hidden=true;
+        } else {
+          targetLock=null;
+          root.scrollTo({top:originalTop,behavior:'instant'});
+          notify('未找到这条提问，已返回跳转前的位置。');
+        }
+        schedulePosition();
+      },4800);
+    }
     schedulePosition();
   }
   async function navigateHeading(id, headingId) {
@@ -302,7 +383,7 @@
       return;
     }
     const r=previewTick.getBoundingClientRect();
-    $('.eyebrow').textContent=`第 ${turn.ordinal} 轮${liveElement(turn)?'':' · 暂未加载'}`;
+    $('.eyebrow').textContent=`第 ${questionTurns.findIndex(t=>t.id===turn.id)+1} 轮${questionElement(turn)?'':' · 暂未加载'}`;
     $('.question').textContent=turn.user?.text?.slice(0,160)||'（无文本提问）';
     $('.answer').textContent=turn.assistant?.text?.slice(0,260)||'等待回答…';
     updateBookmarkButton();
@@ -314,14 +395,14 @@
     else if(tick.offsetTop+tick.offsetHeight>rail.scrollTop+rail.clientHeight)rail.scrollTop=tick.offsetTop+tick.offsetHeight-rail.clientHeight+8;
   }
   function renderRail() {
-    const sig=turns.map(t=>t.id).join('|');
+    const sig=questionTurns.map(t=>t.id).join('|');
     const focused=shadow.activeElement;
     const focusedId=focused?.classList.contains('tick')?focused.dataset.id:focused===bookmarkButton?previewTurnId:null;
     if(sig!==railSignature) {
       railSignature=sig;
       railNeedsReveal=!!focusedId;
       const oldScroll=rail.scrollTop, existing=new Map(Array.from(rail.children,tick=>[tick.dataset.id,tick]));
-      for(const [index,turn] of turns.entries()) {
+      for(const [index,turn] of questionTurns.entries()) {
         let tick=existing.get(turn.id);
         existing.delete(turn.id);
         if(!tick) {
@@ -342,11 +423,11 @@
       rail.scrollTop=oldScroll;
     }
     for(const [index,tick] of Array.from(rail.children).entries()) {
-      const turn=turns[index];
+      const turn=questionTurns[index];
       const isActive=tick.dataset.id===active?.id;
       tick.classList.toggle('active',isActive);
       tick.classList.toggle('marked',bookmarks.has(tick.dataset.id));
-      tick.setAttribute('aria-label',`第 ${turn.ordinal} 轮：${turn.user?.text?.slice(0,60)||'对话'}${bookmarks.has(turn.id)?'，已标记':''}`);
+      tick.setAttribute('aria-label',`第 ${index+1} 轮：${turn.user?.text?.slice(0,60)||'对话'}${bookmarks.has(turn.id)?'，已标记':''}`);
       if(isActive)tick.setAttribute('aria-current','step');else tick.removeAttribute('aria-current');
     }
     if(focused?.classList.contains('tick') && shadow.activeElement!==focused) {
@@ -472,11 +553,11 @@
     const leftSpace=area.left-leftEdge;
     const rightSpace=rightEdge-area.right;
     const root=scrollRoot||document.scrollingElement;
-    rail.hidden=!settings.leftEnabled || turns.length<2 || root.scrollHeight<=root.clientHeight+80 || leftSpace<70;
+    rail.hidden=!settings.leftEnabled || questionTurns.length<2 || root.scrollHeight<=root.clientHeight+80 || leftSpace<70;
     if(rail.hidden)preview.hidden=true;
     rail.style.left=`${leftEdge+40}px`;rail.style.top='50%';rail.style.transform='translateY(-50%)';
-    rail.style.gap=turns.length>60?'1px':'3px';
-    for(const tick of rail.children)tick.style.height=turns.length>60?'8px':'13px';
+    rail.style.gap=questionTurns.length>60?'1px':'3px';
+    for(const tick of rail.children)tick.style.height=questionTurns.length>60?'8px':'13px';
     if(railNeedsReveal) {
       const focusedTick=shadow.activeElement?.classList.contains('tick')?shadow.activeElement:shadow.activeElement===bookmarkButton?previewTick:null;
       if(!rail.hidden && focusedTick?.isConnected)revealRailTick(focusedTick);
@@ -513,13 +594,17 @@
     } else {
       if(targetLock && Date.now()>=targetLock.until)targetLock=null;
       const rootTop=scrollRoot===document.scrollingElement?0:scrollRoot?.getBoundingClientRect().top||0;
-      let selected=null;
+      let selected=null, nearestAbove=-Infinity, nearestBelow=Infinity;
       for(const turn of turns) {
         // The user question selects its corresponding answer before that answer enters view.
         const el=questionElement(turn) || liveElement(turn);if(!el)continue;
         const r=el.getBoundingClientRect();
-        if(r.top<=rootTop+91)selected=turn;
-        else if(!selected){selected=turn;break;}else break;
+        if(!r.height)continue;
+        if(r.top<=rootTop+91) {
+          if(r.top>=nearestAbove){selected=turn;nearestAbove=r.top;}
+        } else if(nearestAbove===-Infinity && r.top<nearestBelow) {
+          selected=turn;nearestBelow=r.top;
+        }
       }
       if(selected)active=selected;
     }
@@ -612,19 +697,14 @@
     maybeCollapseSidebar(snapshot,navigating);
     for(const message of snapshot.messages)seenRouteMessages.set(message.element,`${message.id}\n${message.text}`);
     turns=store.update(snapshot);
-    const nextRoot=snapshot.scrollRoot||document.scrollingElement;
+    questionTurns=turns.filter(turn=>turn.user);
+    const nextRoot=(snapshot.main?snapshot.scrollRoot:scrollRoot)||document.scrollingElement;
     if(analysisReady && settings.collapseAnalysis)snapshot.main?.querySelectorAll('button[aria-expanded="true"]').forEach(foldAnalysisButton);
-    if(nextRoot!==scrollRoot && scrollRoot)turnLocations.clear();
+    if(nextRoot!==scrollRoot && scrollRoot){turnLocations.clear();cancelNavigation();}
     if(nextRoot!==scrollRoot){scrollRoot?.removeEventListener('scroll',schedulePosition);scrollRoot=nextRoot;scrollRoot?.addEventListener('scroll',schedulePosition,{passive:true,signal:lifecycle.signal});}
-    const rootTop=scrollRoot===document.scrollingElement?0:scrollRoot.getBoundingClientRect().top;
-    for(const turn of turns) {
-      const element=questionElement(turn);
-      if(!element)continue;
-      const anchor=element.closest('[data-virtualized-turn]');
-      const questionTop=element.getBoundingClientRect().top;
-      const top=scrollRoot.scrollTop+questionTop-rootTop-90;
-      const inset=anchor ? questionTop-anchor.getBoundingClientRect().top : 0;
-      turnLocations.set(turn.id,{anchor:anchor ? new WeakRef(anchor) : null,inset,top});
+    measureQuestionLocations();
+    if(questionTurns.every(turn=>turnLocations.has(turn.id)) && questionTurns.some(turn=>turn.user.order==null)) {
+      questionTurns.sort((a,b)=>turnLocations.get(a.id).top-turnLocations.get(b.id).top);
     }
     if(snapshot.streaming&&!wasStreaming&&settings.autoExpand&&!userClosed){manualClosed=false;}
     wasStreaming=snapshot.streaming;
