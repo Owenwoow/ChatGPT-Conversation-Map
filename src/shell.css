@@ -6,3 +6,11 @@
 [data-app-shell-workspace] {
   --app-shell-rail-corner-radius: 0px !important;
 }
+
+/* 悬浮侧栏启用内容时，框架仍将固定侧栏标记为收起。 */
+@media (min-width: 768px) {
+  :root:has([data-app-shell-sidebar-open="false"] #app-shell-sidebar [data-slate-sidebar-content="true"]:not([data-sidebar-collapsed], [inert]))
+    > #dual-navigator-host::part(left-map) {
+    display: none;
+  }
+}
