@@ -1,35 +1,66 @@
 .dual-nav-quote-return {
   appearance: none;
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
   align-self: flex-start;
   box-sizing: border-box;
   inline-size: fit-content;
-  max-inline-size: min(100%, 56ch);
+  max-inline-size: min(100%, 16rem);
   min-inline-size: 0;
   margin-block: .875rem .25rem;
-  padding: 0 .625rem;
-  overflow: hidden;
-  border: 0;
-  border-inline-start: 2px solid var(--border-medium, color-mix(in srgb, currentColor 45%, transparent));
-  border-radius: 0;
-  color: var(--text-secondary, color-mix(in srgb, currentColor 72%, transparent));
-  background: transparent;
+  padding: .25rem .7rem;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 1rem;
+  color: var(--text-primary, inherit);
+  background: color-mix(in srgb, currentColor 8%, transparent);
   font: inherit;
   font-size: .875rem;
   line-height: 1.6;
   text-align: start;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   cursor: pointer;
 }
-.dual-nav-quote-return::before { content: attr(data-excerpt); }
+.dual-nav-quote-return::before { content: '↵'; flex: none; font-size: 1.15em; line-height: 1; }
+.dual-nav-quote-return > span {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dual-nav-quote-return > span::before { content: attr(data-excerpt); }
 .dual-nav-quote-return:is(:hover, :focus-visible) {
-  color: var(--text-primary, inherit);
-  border-inline-start-color: currentColor;
+  background: color-mix(in srgb, currentColor 14%, transparent);
 }
 .dual-nav-quote-return:focus-visible {
   outline: 2px solid currentColor;
   outline-offset: 3px;
+}
+.dual-nav-quote-preview {
+  position: fixed;
+  z-index: 2147483647;
+  inset: 0 auto auto 0;
+  box-sizing: border-box;
+  inline-size: max-content;
+  max-inline-size: min(22rem, calc(100% - 16px));
+  max-block-size: 35vh;
+  padding: .55rem .75rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  border-radius: .75rem;
+  background: var(--bg-elevated-primary, Canvas);
+  color: var(--text-primary, CanvasText);
+  box-shadow: 0 4px 16px #0002;
+  font: .875rem/1.5 system-ui, sans-serif;
+  pointer-events: none;
+}
+:is(.dark, [data-theme="dark"]) .dual-nav-quote-preview { color-scheme: dark; }
+.dual-nav-quote-preview > span {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 ::highlight(dual-nav-quote) { background-color: #ffda76; color: #292114; }
 

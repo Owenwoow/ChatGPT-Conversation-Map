@@ -124,6 +124,64 @@ module.exports = async function quoteReturnScenario(browser) {
     await button(3).click();
     await expect(root.locator('.status')).toContainText('未能确认原句，已回到原回答。');
     console.log('PASS 划选、发送方式、引用返回、重渲染与原句变化回退');
+
+    // A short, fully visible excerpt does not need a duplicate preview.
+    await button(4).hover();
+    await expect(page.locator('.dual-nav-quote-preview')).toHaveCount(0);
+    await page.mouse.move(0, 0);
+
+    const longQuote = '这是用于验证悬停预览长度和换行限制的原文内容'.repeat(10);
+    await page.evaluate(text => {
+      const paragraph = document.createElement('p');
+      paragraph.textContent = text;
+      document.querySelector('[data-message-id="a0"] .markdown').append(paragraph);
+    }, longQuote);
+    await select(3, longQuote);
+    await ask();
+    await send(5, 'click');
+    await expect(button(5)).toHaveCount(1);
+    await expect(button(5).locator('span')).toHaveAttribute(
+      'data-excerpt', Array.from(longQuote).slice(0, 16).join('') + '…'
+    );
+    expect(await button(5).evaluate(element => getComputedStyle(element, '::before').content)).toContain('↵');
+
+    await page.setViewportSize({width: 360, height: 900});
+    await button(5).scrollIntoViewIfNeeded();
+    const sizeBefore = await page.evaluate(() => ({
+      width: document.documentElement.scrollWidth,
+      height: document.documentElement.scrollHeight
+    }));
+    await button(5).hover();
+    const preview = page.locator('.dual-nav-quote-preview');
+    await expect(preview).toBeVisible();
+    await expect(preview.locator('span')).toHaveText(Array.from(longQuote).slice(0, 160).join('') + '…');
+    const geometry = await preview.evaluate(element => {
+      const rect = element.getBoundingClientRect();
+      const text = element.querySelector('span');
+      return {
+        position: getComputedStyle(element).position,
+        clamp: getComputedStyle(text).webkitLineClamp,
+        left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom,
+        viewportWidth: innerWidth, viewportHeight: innerHeight,
+        width: document.documentElement.scrollWidth,
+        height: document.documentElement.scrollHeight
+      };
+    });
+    expect(geometry.position).toBe('fixed');
+    expect(geometry.clamp).toBe('4');
+    expect(geometry.left).toBeGreaterThanOrEqual(0);
+    expect(geometry.right).toBeLessThanOrEqual(geometry.viewportWidth);
+    expect(geometry.top).toBeGreaterThanOrEqual(0);
+    expect(geometry.bottom).toBeLessThanOrEqual(geometry.viewportHeight);
+    expect({width: geometry.width, height: geometry.height}).toEqual(sizeBefore);
+    await page.mouse.move(0, 0);
+    await expect(preview).toHaveCount(0);
+    await button(5).click();
+    await expect.poll(() => page.evaluate(() => {
+      const highlight = CSS.highlights.get('dual-nav-quote');
+      return highlight && [...highlight][0].toString();
+    })).toBe(longQuote);
+    console.log('PASS 小气泡与鼠标预览长度、窄屏及完整原文返回');
   } finally {
     await page.close();
   }

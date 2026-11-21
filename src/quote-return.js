@@ -5,6 +5,14 @@
   const editorSelector = '#prompt-textarea,textarea,[contenteditable="true"]';
   const highlightName = 'dual-nav-quote';
   const compact = text => text.replace(/\s+/g, ' ').trim();
+  function excerpt(text, limit) {
+    let result = '';
+    for (const character of text) {
+      if (limit-- === 0) return result + '…';
+      result += character;
+    }
+    return result;
+  }
 
   function readSelection(snapshot) {
     const selection = document.getSelection();
@@ -104,6 +112,35 @@
   function createQuoteReturns({getSnapshot, onJump, signal}) {
     let recent = null, attached = null, pending = null, highlightTimer = 0;
     const links = new Map(), buttons = new Map();
+    const preview = document.createElement('div');
+    preview.className = 'dual-nav-quote-preview';
+    preview.setAttribute('aria-hidden', 'true');
+    const previewText = document.createElement('span');
+    preview.append(previewText);
+    let previewButton = null;
+    function hidePreview() {
+      if (!previewButton) return;
+      previewButton = null;
+      preview.remove();
+    }
+    function showPreview(button, text) {
+      hidePreview();
+      const label = button.firstElementChild;
+      if (text === label.dataset.excerpt && label.scrollWidth <= label.clientWidth) return;
+      previewButton = button;
+      previewText.textContent = text;
+      document.body.append(preview);
+      const anchor = button.getBoundingClientRect();
+      const box = preview.getBoundingClientRect();
+      const left = Math.min(anchor.left, document.documentElement.clientWidth - box.width - 8);
+      const top = anchor.top >= box.height + 14 ? anchor.top - box.height - 6 :
+        Math.min(anchor.bottom + 6, document.documentElement.clientHeight - box.height - 8);
+      preview.style.left = Math.max(8, left) + 'px';
+      preview.style.top = Math.max(8, top) + 'px';
+    }
+    window.addEventListener('scroll', hidePreview, {capture:true, passive:true, signal});
+    window.addEventListener('resize', hidePreview, {signal});
+    document.addEventListener('keydown', event => { if (event.key === 'Escape') hidePreview(); }, {signal});
     function rememberSelection() {
       const selection = readSelection(getSnapshot());
       if (selection) recent = selection;
@@ -161,17 +198,30 @@
           button = document.createElement('button');
           button.type = 'button';
           button.className = 'dual-nav-quote-return';
-          button.dataset.excerpt = anchor.preview;
-          button.title = '回到原文';
-          button.setAttribute('aria-label', '回到原文：' + anchor.preview);
-          button.addEventListener('click', () => onJump(anchor), {signal});
+          const label = document.createElement('span');
+          label.dataset.excerpt = excerpt(anchor.preview, 16);
+          button.append(label);
+          const text = excerpt(anchor.preview, 160);
+          button.setAttribute('aria-label', '回到原文：' + text);
+          button.addEventListener('pointerenter', event => {
+            if (event.pointerType === 'mouse' || event.pointerType === 'pen') showPreview(button, text);
+          }, {signal});
+          button.addEventListener('pointerleave', hidePreview, {signal});
+          button.addEventListener('focus', () => {
+            if (button.matches(':focus-visible')) showPreview(button, text);
+          }, {signal});
+          button.addEventListener('blur', hidePreview, {signal});
+          button.addEventListener('click', () => { hidePreview(); onJump(anchor); }, {signal});
           buttons.set(turn.id, button);
         }
         // The label is rendered by CSS so it never enters a message's textContent.
         if (button.parentNode !== answer || button !== answer.lastElementChild) answer.append(button);
       }
       for (const [id, button] of buttons) {
-        if (!mounted.has(id)) { button.remove(); buttons.delete(id); }
+        if (!mounted.has(id)) {
+          if (previewButton === button) hidePreview();
+          button.remove(); buttons.delete(id);
+        }
       }
     }
 
@@ -182,6 +232,7 @@
       highlightTimer = setTimeout(() => CSS.highlights.delete(highlightName), 2200);
     }
     function reset() {
+      hidePreview();
       pending = recent = attached = null;
       links.clear();
       for (const button of buttons.values()) button.remove();
