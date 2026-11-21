@@ -161,8 +161,9 @@
           button = document.createElement('button');
           button.type = 'button';
           button.className = 'dual-nav-quote-return';
-          const snippet = Array.from(anchor.preview);
-          button.setAttribute('aria-label', '↩ 回到原文 · ' + snippet.slice(0, 32).join('') + (snippet.length > 32 ? '…' : ''));
+          button.dataset.excerpt = anchor.preview;
+          button.title = '回到原文';
+          button.setAttribute('aria-label', '回到原文：' + anchor.preview);
           button.addEventListener('click', () => onJump(anchor), {signal});
           buttons.set(turn.id, button);
         }
