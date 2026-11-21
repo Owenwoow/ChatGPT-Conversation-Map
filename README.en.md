@@ -24,6 +24,7 @@
 | What you want to do | How Conversation Map helps |
 | --- | --- |
 | Find an earlier question and answer. | The **conversation minimap** displays one tick per turn. Hover or focus a tick to preview an excerpt, then click to jump. Scroll the minimap in long chats. |
+| Resume reading after asking about a passage. | Click **↩ 回到原文** below the follow-up answer to jump back to the selected passage and briefly highlight it. The link is available until you reload the page or switch chats. |
 | Return to an important turn later. | Add or remove **bookmarks** in the preview. Bookmarks for saved conversations stay on your device and survive page reloads. |
 | Read a specific section of a long answer. | The **hierarchical answer outline** recognizes H1–H6 headings, supports section jumps, highlights the current heading, and lets you expand or collapse branches individually or all at once. |
 | Follow an answer as it is generated. | **Live updates** add headings during generation. Scrolling keeps the current turn and heading in sync; selecting another turn switches its outline. |

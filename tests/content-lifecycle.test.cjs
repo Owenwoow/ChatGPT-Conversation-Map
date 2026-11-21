@@ -5,7 +5,8 @@ const path = require('node:path');
 const vm = require('node:vm');
 const model = require('../src/model.js');
 
-const source = fs.readFileSync(path.join(__dirname, '../src/content.js'), 'utf8');
+const source = ['quote-return.js', 'content.js'].map(file =>
+  fs.readFileSync(path.join(__dirname, '../src', file), 'utf8')).join('\n');
 
 function setup() {
   class Element {

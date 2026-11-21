@@ -8,7 +8,7 @@
   "content_scripts": [{
     "matches": ["https://chatgpt.com/*"],
     "css": ["src/shell.css"],
-    "js": ["src/adapter.js", "src/model.js", "src/content.js", "src/block-export.js"],
+    "js": ["src/adapter.js", "src/model.js", "src/quote-return.js", "src/content.js", "src/block-export.js"],
     "run_at": "document_idle"
   }],
   "icons": {"16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png"},

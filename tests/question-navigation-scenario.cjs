@@ -23,7 +23,7 @@ module.exports=async function questionNavigation(browser) {
       extra.innerHTML='<div data-message-author-role="assistant" data-message-id="extra-answer">回答片段</div>';
       thread.append(extra);
     });
-    for(const script of ['adapter','model','content'])await page.addScriptTag({path:path.join(__dirname,`../src/${script}.js`)});
+    for(const script of ['adapter','model','quote-return','content'])await page.addScriptTag({path:path.join(__dirname,`../src/${script}.js`)});
     const root=page.locator('#dual-navigator-host');
     const tick=id=>root.locator(`.tick[data-id="${id}"]`);
     const question=id=>page.locator(`[data-message-id="${id}"]`);

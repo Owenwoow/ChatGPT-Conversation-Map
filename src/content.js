@@ -27,6 +27,7 @@
   const bookmarkWrites = new Set();
   let previewTurnId = null, previewTick = null, previewHideTimer = 0;
   const lifecycle = new AbortController();
+  const quoteReturns = DualNav.createQuoteReturns({getSnapshot:()=>snapshot, onJump:jumpToQuote, signal:lifecycle.signal});
   let domObserver = null, themeObserver = null, routeInterval = 0, disposed = false;
   let extensionRuntime = false;
   try {extensionRuntime=!!globalThis.chrome?.runtime?.id;} catch {}
@@ -298,37 +299,56 @@
     }
     schedulePosition();
   }
-  async function navigateHeading(id, headingId) {
-    const token=++navigation;
-    let turn=turns.find(t=>t.id===id); if(!turn)return;
-    active=turn; targetLock={id,until:Date.now()+2400}; render();
-    // Recover only through the page's normal scrolling. Never call private endpoints.
-    let element=headings(turn).find(h=>h.id===headingId)?.element;
-    if(!element?.isConnected) {
-      notify('正在定位历史消息…');
-      const root=scrollRoot, key=currentKey;
-      const top=turnLocations.get(id)?.top;
-      if(root && top!==undefined) {
-        root.scrollTo({top,behavior:'instant'});
-        // Let the page mount the destination without paging through the thread.
-        for(let wait=0;wait<8;wait++) {
-          await new Promise(resolve=>setTimeout(resolve,150));
-          if(token!==navigation || adapter.getKey()!==key || root!==scrollRoot)return;
-          if(wait===0 || wait===7)refresh();
-          if(token!==navigation)return;
-          turn=turns.find(t=>t.id===id);
-          element=headings(turn).find(h=>h.id===headingId)?.element;
-          if(element?.isConnected)break;
-        }
-      }
-      if(!element?.isConnected) {
-        targetLock=null;notify('这条历史消息尚未加载，请向该轮附近滚动后重试。');schedulePosition();return;
+  async function loadHistoricalTarget(id, lookup, token) {
+    notify('正在定位历史消息…');
+    const root=scrollRoot, key=currentKey;
+    const top=turnLocations.get(id)?.top;
+    if(root && top!==undefined) {
+      root.scrollTo({top,behavior:'instant'});
+      // Let the page mount the destination without paging through the thread.
+      for(let wait=0;wait<8;wait++) {
+        await new Promise(resolve=>setTimeout(resolve,150));
+        if(token!==navigation || adapter.getKey()!==key || root!==scrollRoot)return;
+        if(wait===0 || wait===7)refresh();
+        if(token!==navigation)return;
+        const element=lookup();
+        if(element?.isConnected)return element;
       }
     }
-    if(token!==navigation)return;
+    targetLock=null;notify('这条历史消息尚未加载，请向该轮附近滚动后重试。');schedulePosition();
+  }
+  async function navigateHeading(id, headingId) {
+    const token=++navigation;
+    const turn=turns.find(t=>t.id===id); if(!turn)return;
+    active=turn; targetLock={id,until:Date.now()+2400}; render();
+    const lookup=()=>headings(turns.find(t=>t.id===id)).find(h=>h.id===headingId)?.element;
+    let element=lookup();
+    if(!element?.isConnected)element=await loadHistoricalTarget(id,lookup,token);
+    if(!element || token!==navigation)return;
     const behavior=motionPreference.matches?'instant':'smooth';
     $('.status').hidden=true;
     scrollToElement(element,behavior);
+    schedulePosition();
+  }
+  async function jumpToQuote(anchor) {
+    if(!contextAlive() || adapter.getKey()!==currentKey)return;
+    refresh();
+    cancelNavigation();
+    const token=navigation;
+    const source=turns.find(turn=>turn.assistant?.id===anchor.source);
+    if(!source){notify('当前对话分支中找不到原回答。');return;}
+    const lookup=()=>snapshot.messages.find(message=>message.id===anchor.source && message.role==='assistant')?.element;
+    let element=lookup();
+    if(!element?.isConnected)element=await loadHistoricalTarget(source.id,lookup,token);
+    if(!element || token!==navigation || !snapshot.main?.contains(element))return;
+    const range=DualNav.resolveQuoteRange(element,anchor);
+    const paragraph=anchor.paragraph && element.contains(anchor.paragraph) ? anchor.paragraph : null;
+    const match=range?.getClientRects()[0];
+    const rect=match || (paragraph || element).getBoundingClientRect();
+    const rootTop=scrollRoot===document.scrollingElement ? 0 : scrollRoot.getBoundingClientRect().top;
+    scrollRoot.scrollBy({top:rect.top-rootTop-scrollRoot.clientHeight/3,behavior:'instant'});
+    if(match){$('.status').hidden=true;quoteReturns.highlight(range);}
+    else notify(paragraph?'原句已变化，已回到原段落。':'未能确认原句，已回到原回答。');
     schedulePosition();
   }
   function bookmarkPrefix(key) {return `dualNavBookmark:${encodeURIComponent(key)}:`;}
@@ -622,8 +642,9 @@
     host.style.setProperty('--dn-hover',dark?'#ffffff0e':'#00000007');
   }
   function cancelImmersive() {immersivePending=null;clearTimeout(immersiveTimer);immersiveTimer=0;}
-  function noteSend() {
+  function noteSend(target) {
     const key=adapter.getKey();
+    if(currentKey===key)quoteReturns.noteSend(target,turns);
     if(!settings.immersiveMode)return;
     if(immersivePending && Date.now()-immersivePending.at>15000)cancelImmersive();
     // A click may also submit the form. Keep the baseline from before either event.
@@ -681,6 +702,7 @@
       // Do not mistake that old DOM for virtualized history of the new route.
       routeExclusions=new WeakMap(seenRouteMessages);seenRouteMessages=new Map();
       turnLocations.clear();
+      quoteReturns.reset();
       currentKey=snapshot.key;store.reset(currentKey);active=null;outlinePreferences.clear();
       manualClosed=false;userClosed=false;temporaryOpen=false;wasStreaming=false;treeSignature=railSignature=null;treeTurnId=null;cancelNavigation();
       nativePanel=null;panelTemporaryOpen=false;
@@ -697,6 +719,7 @@
     maybeCollapseSidebar(snapshot,navigating);
     for(const message of snapshot.messages)seenRouteMessages.set(message.element,`${message.id}\n${message.text}`);
     turns=store.update(snapshot);
+    quoteReturns.update(snapshot,turns);
     questionTurns=turns.filter(turn=>turn.user);
     const nextRoot=(snapshot.main?snapshot.scrollRoot:scrollRoot)||document.scrollingElement;
     if(analysisReady && settings.collapseAnalysis)snapshot.main?.querySelectorAll('button[aria-expanded="true"]').forEach(foldAnalysisButton);
@@ -785,7 +808,7 @@
   window.addEventListener('wheel',cancelNavigation,{passive:true,signal:lifecycle.signal});
   window.addEventListener('touchstart',cancelNavigation,{passive:true,signal:lifecycle.signal});
   window.addEventListener('keydown',e=>{
-    if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&adapter.isComposer(e.target)){draftSendAt=Date.now();explicitNavigation=false;noteSend();}
+    if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&adapter.isComposer(e.target)){draftSendAt=Date.now();explicitNavigation=false;noteSend(e.target);}
     if(['PageDown','PageUp','ArrowDown','ArrowUp','Home','End'].includes(e.key))cancelNavigation();
     if(e.key==='Escape'){
       const inside=toc.matches(':focus-within')||shadow.activeElement===opener;
@@ -805,11 +828,11 @@
   },{capture:true,signal:lifecycle.signal});
   document.addEventListener('click',e=>{
     if(e.target.closest?.(adapter.selectors.sidebarControl))cancelImmersive();
-    if(adapter.isSendButton(e.target)){draftSendAt=Date.now();explicitNavigation=false;noteSend();}
+    if(adapter.isSendButton(e.target)){draftSendAt=Date.now();explicitNavigation=false;noteSend(e.target);}
     const href=e.target.closest?.('a[href]')?.href;
     if(href){const url=new URL(href,location.href);if(url.origin===location.origin&&url.pathname!==currentKey){explicitNavigation=true;cancelImmersive();}}
   },{capture:true,signal:lifecycle.signal});
-  document.addEventListener('submit',e=>{if(e.target.matches?.('form[data-chatgpt-composer]')){draftSendAt=Date.now();explicitNavigation=false;noteSend();}},{capture:true,signal:lifecycle.signal});
+  document.addEventListener('submit',e=>{if(e.target.matches?.('form[data-chatgpt-composer],form:has(#prompt-textarea)')){draftSendAt=Date.now();explicitNavigation=false;noteSend(e.target);}},{capture:true,signal:lifecycle.signal});
   domObserver=new MutationObserver(records=>{
     if(!contextAlive())return;
     // A page hydration/recovery can remove nodes outside body or replace body.

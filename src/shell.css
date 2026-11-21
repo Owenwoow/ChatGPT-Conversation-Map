@@ -1,3 +1,24 @@
+.dual-nav-quote-return {
+  display: block;
+  align-self: flex-start;
+  max-width: 100%;
+  margin-block: .75rem .25rem;
+  padding: .25rem .6rem;
+  overflow: hidden;
+  border: 1px solid currentColor;
+  border-radius: .5rem;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  font-size: .8125rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.dual-nav-quote-return::before { content: attr(aria-label); }
+.dual-nav-quote-return:hover { background: color-mix(in srgb, currentColor 8%, transparent); }
+::highlight(dual-nav-quote) { background-color: #ffda76; color: #292114; }
+
 /* ChatGPT uses the same radius for the divider, the main pane and its clip. */
 [data-app-shell-frame] {
   --app-shell-window-radius: 0px !important;
